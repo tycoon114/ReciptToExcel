@@ -32,24 +32,30 @@ try {
         # OCR can return an entire label column before the amount column.
         # Reconstruct visual rows from word coordinates before parsing money fields.
         $words = @($result.Lines | ForEach-Object { $_.Words } | ForEach-Object {
-            [pscustomobject]@{ Text=$_.Text; Left=$_.BoundingRect.X; Center=($_.BoundingRect.Y + $_.BoundingRect.Height / 2); Height=$_.BoundingRect.Height }
+            [pscustomobject]@{ Text=$_.Text; Left=$_.BoundingRect.X; Right=($_.BoundingRect.X + $_.BoundingRect.Width); Top=$_.BoundingRect.Y; Bottom=($_.BoundingRect.Y + $_.BoundingRect.Height); Center=($_.BoundingRect.Y + $_.BoundingRect.Height / 2); Height=$_.BoundingRect.Height }
         } | Sort-Object Center, Left)
         $rows = [System.Collections.Generic.List[string]]::new()
+        $rowBoxes = [System.Collections.Generic.List[object]]::new()
+        function Add-OcrRow($rowWords) {
+            $rowText = (($rowWords | Sort-Object Left | ForEach-Object { $_.Text }) -join ' ')
+            $rows.Add($rowText)
+            $rowBoxes.Add(@{text=$rowText; top=($rowWords | Measure-Object Top -Minimum).Minimum; bottom=($rowWords | Measure-Object Bottom -Maximum).Maximum})
+        }
         $group = [System.Collections.Generic.List[object]]::new()
         $center = 0.0
         $height = 0.0
         foreach ($word in $words) {
             if ($group.Count -gt 0 -and [Math]::Abs($word.Center - $center) -gt [Math]::Max(6, $height * 0.55)) {
-                $rows.Add((($group | Sort-Object Left | ForEach-Object { $_.Text }) -join ' '))
+                Add-OcrRow $group
                 $group.Clear()
             }
             $group.Add($word)
             $center = ($group | Measure-Object -Property Center -Average).Average
             $height = ($group | Measure-Object -Property Height -Average).Average
         }
-        if ($group.Count -gt 0) { $rows.Add((($group | Sort-Object Left | ForEach-Object { $_.Text }) -join ' ')) }
+        if ($group.Count -gt 0) { Add-OcrRow $group }
         $text = $rows -join "`n"
-        $payload = @{text=$text; language=$engine.RecognizerLanguage.LanguageTag; languages=$languages; error=''}
+        $payload = @{text=$text; rows=@($rowBoxes.ToArray()); language=$engine.RecognizerLanguage.LanguageTag; languages=$languages; error=''}
     } finally { $stream.Dispose() }
 } catch { $payload = @{text=''; language=''; error=$_.Exception.Message} }
 $json = ConvertTo-Json -InputObject $payload -Compress -Depth 5

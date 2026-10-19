@@ -134,18 +134,20 @@ public class LedgerRepository {
         return get(id);
     }
 
-    public Expense reanalyze(long id, int version, ReceiptAnalyzer.Analysis a) {
+    public Expense reanalyze(long id, int version, ReceiptAnalyzer.Analysis a, boolean clearBookDefault) {
         int count =
                 db.update(
                         "UPDATE expenses SET receipt_date=?,vendor=?,category=?,description=CASE"
-                            + " WHEN TRIM(description)='' THEN ? ELSE description END,note=CASE"
-                            + " WHEN TRIM(note)='' THEN ? ELSE note"
+                            + " WHEN TRIM(description)='' OR (? AND description='도서 구입') THEN ? ELSE description END,note=CASE"
+                            + " WHEN TRIM(note)='' OR (? AND note='도서 구입') THEN ? ELSE note"
                             + " END,amount=?,supply_amount=?,vat_amount=?,payment_method=?,analysis_source=?,analysis_message=?,ocr_text=?,status='REVIEW',version=version+1"
                             + " WHERE id=? AND version=?",
                         a.date(),
                         a.vendor(),
                         a.category(),
+                        clearBookDefault,
                         a.description(),
+                        clearBookDefault,
                         a.note(),
                         a.amount(),
                         a.supply(),

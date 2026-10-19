@@ -104,10 +104,16 @@ public class ReceiptService {
         checkVersion(current, version);
         String purpose = hint == null ? current.description() : hint;
         if (purpose.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
+        // Old branch-substring classification supplied this default; do not feed it back as user intent.
+        boolean staleBookDefault = "OCR_RULES".equals(current.analysisSource())
+                && "도서인쇄비".equals(current.category()) && "도서 구입".equals(current.description())
+                && !ReceiptTextParser.book(Objects.toString(current.ocrText(), ""));
+        if (staleBookDefault && "도서 구입".equals(purpose.trim())) purpose = "";
         var analysis = analyzer.analyze(image(id), purpose);
         if (analysis.source().equals("OCR_RULES") && analysis.text().isBlank())
             throw bad("문자를 다시 읽지 못했습니다. 기존 입력은 유지됩니다. 사진 방향이나 선명도를 확인해 주세요.");
-        return repo.reanalyze(id, version, analysis);
+        return repo.reanalyze(id, version, analysis,
+                staleBookDefault && !"도서인쇄비".equals(analysis.category()));
     }
 
     private void checkVersion(Expense current, int version) {

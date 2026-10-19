@@ -11,6 +11,24 @@ import javax.imageio.ImageIO;
 /** Prepares a separate OCR image; the stored evidence photo is kept intact. */
 @Component
 public class ReceiptOcrImages {
+    /** Plain downsampling preserves solid/double-width fonts that thickening can merge. */
+    public BufferedImage resized(Path path, int maxEdge) throws Exception {
+        if (maxEdge < 1) throw new IllegalArgumentException("Positive size required");
+        var source = ImageIO.read(path.toFile());
+        if (source == null) throw new IllegalArgumentException("Unreadable receipt photo");
+        try {
+            double scale = Math.min(1, (double) maxEdge / Math.max(source.getWidth(), source.getHeight()));
+            var result = new BufferedImage(Math.max(1, (int) Math.round(source.getWidth() * scale)),
+                    Math.max(1, (int) Math.round(source.getHeight() * scale)), BufferedImage.TYPE_INT_RGB);
+            var g = result.createGraphics();
+            try {
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                g.drawImage(source, 0, 0, result.getWidth(), result.getHeight(), null);
+            } finally { g.dispose(); }
+            return result;
+        } finally { source.flush(); }
+    }
+
     public BufferedImage prepare(Path path, boolean contrast) throws Exception {
         var image = ImageIO.read(path.toFile());
         if (image == null) throw new IllegalArgumentException("Unreadable receipt photo");

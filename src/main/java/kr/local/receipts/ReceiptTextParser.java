@@ -1,6 +1,7 @@
 package kr.local.receipts;
 
 import java.time.LocalDate;
+import java.text.Normalizer;
 import java.util.*;
 import java.util.regex.*;
 
@@ -10,11 +11,11 @@ final class ReceiptTextParser {
             Pattern.compile(
                     "(?<![0-9A-Za-z,.])(?:[0-9]{1,3}(?:\\h*,\\h*[0-9]{3})+|[0-9]+)(?![0-9A-Za-z,.])");
     private static final String PAYMENT =
-            "(?:실\\s*결\\s*제\\s*금\\s*액|결\\s*[제재]\\s*금\\s*액|(?:카\\s*드|가\\s*드|신\\s*용\\s*카\\s*드)\\s*결\\s*[제재세]|승\\s*인\\s*금\\s*액|총\\s*결\\s*제\\s*금\\s*액)";
+            "(?:실\\s*결\\s*제\\s*금\\s*액|결\\s*[제재]\\s*(?:대\\s*상\\s*)?금\\s*액|(?:카\\s*드|가\\s*드|신\\s*용\\s*카\\s*드)\\s*결\\s*[제재세지](?:[lI|])?|(?:카\\s*드|가\\s*드)\\s*매\\s*출|승\\s*인\\s*금\\s*액|총\\s*결\\s*제\\s*금\\s*액)";
     private static final String TOTAL =
             "(?:합\\s*계(?:\\s*[금급]\\s*액)?|총\\s*금\\s*액|받을\\s*금\\s*액|청\\s*구\\s*금\\s*액)";
     private static final String SUPPLY =
-            "(?:공\\s*급\\s*가\\s*액|과\\s*세\\s*금\\s*액|부\\s*가\\s*세\\s*과\\s*세\\s*물\\s*품\\s*[가기]\\s*액|판\\s*매\\s*금\\s*액)";
+            "(?:공\\s*급\\s*가(?:\\s*액)?|과\\s*세\\s*(?:금\\s*액|물\\s*품)|부\\s*가\\s*세\\s*과\\s*세\\s*물\\s*품\\s*[가기]\\s*액|판\\s*매\\s*금\\s*액)";
     private static final String VAT = "(?:부\\s*가\\s*세|부\\s*가\\s*가\\s*치\\s*세)";
 
     private record Candidate(long value, int priority) {}
@@ -22,19 +23,20 @@ final class ReceiptTextParser {
     private record Total(Long amount, String warning) {}
 
     static ReceiptAnalyzer.Analysis parse(String original, String purpose) {
-        String text = Objects.toString(original, "").replace('\u00a0', ' '),
+        String text = Normalizer.normalize(Objects.toString(original, ""), Normalizer.Form.NFKC).replace('\u00a0', ' '),
                 hint = Objects.toString(purpose, "");
         String vendor = merchant(text), date = null;
         var dates =
-                Pattern.compile("(20\\d{2})[./년\\- ]+([01]?\\d)[./월\\- ]+([0-3]?\\d)")
+                Pattern.compile("(?<!\\d)(20\\d{2})[./년\\- ]*([01]\\d)[./월\\- ]*([0-3]\\d)(?!\\d)|(20\\d{2})[./년\\- ]+([01]?\\d)[./월\\- ]+([0-3]?\\d)")
                         .matcher(text);
         while (dates.find() && date == null)
             try {
+                int offset = dates.group(1) == null ? 3 : 0;
                 date =
                         LocalDate.of(
-                                        Integer.parseInt(dates.group(1)),
-                                        Integer.parseInt(dates.group(2)),
-                                        Integer.parseInt(dates.group(3)))
+                                        Integer.parseInt(dates.group(1 + offset)),
+                                        Integer.parseInt(dates.group(2 + offset)),
+                                        Integer.parseInt(dates.group(3 + offset)))
                                 .toString();
             } catch (Exception ignored) {
             }
@@ -73,6 +75,17 @@ final class ReceiptTextParser {
                 && a.supply() + a.vat() == a.amount()) score += 3;
         if (!a.category().equals("미분류")) score++;
         return score;
+    }
+
+    static boolean needsAmountRecovery(String line) {
+        return Pattern.compile(PAYMENT + "|" + TOTAL).matcher(line).find()
+                && !line.replaceAll("\\s", "").matches(".*(?:과세|면세|부가세|포인트|할인|쿠폰|적립).*" )
+                && total(line).amount() == null;
+    }
+
+    static String recoveredAmount(String line, long amount) {
+        var label = Pattern.compile(PAYMENT + "|" + TOTAL).matcher(line);
+        return label.find() ? line.substring(0, label.end()) + " : " + amount : line;
     }
 
     private static Total total(String text) {
@@ -135,10 +148,14 @@ final class ReceiptTextParser {
             Matcher matcher = pattern.matcher(line);
             while (matcher.find()) {
                 String tail =
-                        line.substring(matcher.end()).replaceFirst("^[\\h:：₩•·.\\-\\[\\]()*]+", "");
-                if (tail.isBlank() && i + 1 < lines.length && bare(lines[i + 1]))
+                                line.substring(matcher.end()).replaceFirst("^[\\h:：₩•·.\\-\\[\\]()*]+", "");
+                // A card payment may put IC/installment metadata before the printed amount.
+                tail = tail.replaceFirst("^(?i)(?:IC\\)?\\h*)?(?:일시불|할부\\h*\\d+개월)?[\\h/\\]():：]*", "");
+                boolean allowNextLine = priority >= 80 && !label.equals(SUPPLY) && !label.equals(VAT);
+                if (allowNextLine && tail.isBlank() && i + 1 < lines.length && bare(lines[i + 1]))
                     tail = lines[i + 1].trim();
-                if (!tail.matches("^[0-9].*")) continue;
+                // Never harvest a number from a date, card ID, decimal fragment, or OCR debris.
+                if (!tail.matches("(?:[0-9]{1,2}\\h+)?(?:[0-9]{1,3}(?:\\h*,\\h*[0-9]{3})+|[0-9]+)\\h*(?:원|KRW)?[\\h\\]\\)]*")) continue;
                 List<Long> amounts = numbers(tail);
                 if (amounts.isEmpty()) continue;
                 long value = amounts.get(amounts.size() - 1);
@@ -201,12 +218,16 @@ final class ReceiptTextParser {
                 text.replaceAll("\\([^\\r\\n)]*점\\)?", "")
                         .replaceAll("\\s", "")
                         .toLowerCase(Locale.ROOT);
-        return s.contains("문고")
-                || s.contains("서점")
+        if (s.contains("문고")
                 || s.contains("도서명")
                 || s.contains("isbn")
                 || s.contains("도서구입")
-                || s.contains("책구매");
+                || s.contains("책구매")) return true;
+        // Weak 서점 text must belong to the merchant, not a location or a branch elsewhere.
+        String vendor = merchant(text).replaceAll("\\([^)]*점\\)", "")
+                .replaceFirst("\\h+[가-힣A-Za-z0-9]{2,}점$", "");
+        return vendor.contains("서점")
+                && !s.matches(".*(?:버거|burger|와퍼|갈비|제육|보쌈|정식|제면소|수세미|종이접시).*" );
     }
 
     private static String merchant(String text) {
@@ -221,23 +242,38 @@ final class ReceiptTextParser {
             }
         }
         List<String> lines = text.lines().limit(12).toList();
-        for (String line : lines) {
-            String cleaned = cleanMerchant(line);
-            if (plausible(cleaned) && cleaned.matches(".*(?:문\\s*고|서\\s*점|식당|카페|제면소|렌탈샵).*"))
-                return cleaned;
+        String best = "", branch = "";
+        int bestScore = Integer.MIN_VALUE;
+        for (int i = 0; i < lines.size(); i++) {
+            String cleaned = cleanMerchant(lines.get(i));
+            if (!plausible(cleaned)) continue;
+            if (cleaned.matches(".*[가-힣].*\\d$")) continue;
+            if (cleaned.matches("[가-힣A-Za-z0-9]{1,12}점")
+                    && !cleaned.matches(".*(?:문고|식당|카페)")
+                    && (!cleaned.endsWith("서점") || !best.isBlank())) {
+                if (branch.isBlank()) branch = cleaned;
+                continue;
+            }
+            // Short location names can contain 서점, but are not a merchant identity on their own.
+            if (cleaned.matches("[가-힣]서점")) {
+                if (branch.isBlank()) branch = cleaned;
+                continue;
+            }
+            int score = 30 - i * 3;
+            if (cleaned.matches(".*(?:문\\s*고|서\\s*점|식당|카페|제면소|렌탈샵).*")) score += 10;
+            if (cleaned.matches("[A-Z][A-Z &'-]{4,}")) score += 8;
+            if (score > bestScore) { best = cleaned; bestScore = score; }
         }
-        for (String line : lines.stream().limit(3).toList()) {
-            String cleaned = cleanMerchant(line);
-            if (plausible(cleaned)) return cleaned;
-        }
-        return "";
+        if (!best.isBlank() && !branch.isBlank() && !best.contains(branch)) best += "(" + branch + ")";
+        return best;
     }
 
     private static String cleanMerchant(String text) {
         return ReceiptAnalyzer.cut(
-                text.split("(?:대표(?:이사)?\\h*[:：•]|사업자|\\bTEL\\b|NO[:：])", 2)[0]
+                text.split("(?i)(?:대표(?:이사)?\\h*[:：•]|사업자|\\bTEL\\b|NO[:：]|\\(?0\\d{1,2}\\)?[\\h.·•-]*\\d{3,4}[\\h.·•-]\\d{4})", 2)[0]
                         .replaceAll("^[\\h\\[\\]★☆*•:：]+|[\\h★☆*]+$", "")
                         .replaceAll("\\h+", " ")
+                        .replaceFirst("^([A-Z][A-Z &'-]{4,})\\h+[가-힣][\\h•:：]*$", "$1")
                         .trim(),
                 200);
     }
@@ -247,8 +283,13 @@ final class ReceiptTextParser {
                 || name.length() > 80
                 || name.replaceAll("\\s", "")
                         .matches(
-                                ".*(?:주소|전화|사업자|등록번호|매출일|거래일|카운터|출력|영수증|교환|환불|대표|고객용|KSNET|KSnET|승인|포상금|국세|정부|공급가액|부가세|합계|단가|수량|금액).*"))
+                                ".*(?:주소|전화|사업자|등록번호|매출일|거래일|카운터|출력|영수증|교환|환불|대표|고객용|KSNET|KSnET|승인|포상금|국세|정부|공급가액|부가세|합계|단가|수량|금액|고객센터|주문|결제|판매시간|테이블|설문|담당자|일시불|매입사|https?).*"))
             return false;
+        if (name.matches(".*\\d{3}-\\d{2}-\\d{5}.*")
+                || name.matches(".*[0-9].*[,].*")
+                || name.matches(".*(?:지상|지하).*\\d.*")
+                || name.matches(".*\\d{4}[-./]\\d{1,2}[-./]\\d{1,2}.*")
+                || name.matches(".*(?:특별시|광역시|[가-힣]+구\\h+[가-힣]+로).*")) return false;
         long letters =
                 name.codePoints()
                         .filter(
@@ -267,8 +308,9 @@ final class ReceiptTextParser {
                                                 || c < 128
                                                 || Character.isWhitespace(c)))
                         .count();
+        boolean mixedKoreanName = name.matches("[가-힣][가-힣\\p{IsHan}]{2,}") && letters >= 3;
         return letters >= 2
-                && invalid == 0
+                && (invalid == 0 || mixedKoreanName)
                 && name.chars().filter(c -> "~;=\\'\"<>".indexOf(c) >= 0).count() < 2;
     }
 }

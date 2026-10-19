@@ -81,7 +81,7 @@ document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click"
 $("editor").addEventListener("cancel",e=>{if(photoBusy)e.preventDefault();});
 async function photoAction(action, quarterTurns=0) {
   if(photoBusy)return;
-  if(action==="reanalyze" && !confirm("날짜·거래처·계정과목·금액·결제수단을 다시 인식하고 검토 대기로 변경합니다. 적요·비고·사용자·부서는 유지합니다. 진행할까요?"))return;
+  if(action==="reanalyze" && !confirm("날짜·거래처·계정과목·금액·결제수단을 다시 인식하고 검토 대기로 변경합니다. 직접 작성한 적요·비고·사용자·부서는 유지합니다. 이전 오분류의 ‘도서 구입’ 기본값은 재검토합니다. 진행할까요?"))return;
   const preserved=action==="rotate"?fields:["description","note","ownerName","department"];
   const draft=Object.fromEntries(preserved.filter(field=>action==="rotate" || $("edit-"+field).value.trim()!=="").map(field=>[field,$("edit-"+field).value]));
   const id=$("edit-id").value, version=Number($("edit-version").value);
@@ -91,6 +91,9 @@ async function photoAction(action, quarterTurns=0) {
   $("analysis-message").textContent=action==="rotate"?"사진 방향을 저장하고 있습니다…":"사진을 다시 읽고 있습니다. 잠시 기다려 주세요…";
   try {
     const expense=await api(`/api/expenses/${id}/${action}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version,quarterTurns,hint})});
+    if(action==="reanalyze" && expense.category!=="도서인쇄비") {
+      for(const field of ["description","note"]) if(draft[field]==="도서 구입" && expense[field]==="") delete draft[field];
+    }
     await load();openEditor(expense);
     for(const [field,value] of Object.entries(draft))$("edit-"+field).value=value;
     if(action==="rotate")$("analysis-message").textContent="사진 방향을 저장했습니다. ‘사진 다시 읽기’로 인식을 다시 실행할 수 있습니다.";

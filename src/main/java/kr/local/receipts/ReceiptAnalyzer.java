@@ -193,15 +193,15 @@ public class ReceiptAnalyzer {
 
     public static String classify(String text) {
         String s = text.toLowerCase(Locale.ROOT);
-        if (ReceiptTextParser.book(text)) return "도서인쇄비";
         if (contains(s, "거래처 식사", "거래처식사", "접대", "고객 미팅")) return "접대비";
         if (contains(s, "회의", "미팅")) return "회의비";
+        if (ReceiptTextParser.book(text)) return "도서인쇄비";
         if (contains(s, "택시", "기차", "버스", "주차", "주유", "교통", "출장", "ktx")) return "여비교통비";
-        if (contains(s, "문구", "사무용", "복사용지", "소모품", "프린터")) return "소모품비";
+        if (contains(s, "문구", "사무용", "복사용지", "소모품", "프린터", "수세미", "종이접시", "과일꽂이")) return "소모품비";
         if (contains(s, "통신요금", "인터넷요금", "우편", "전화요금")) return "통신비";
         if (contains(
                 s, "점심", "저녁", "식사", "식대", "밥값", "김밥", "국밥", "식당", "분식", "커피", "카페", "불고기", "비빔밥",
-                "찌개", "라면")) return "복리후생비";
+                "찌개", "라면", "버거", "burger", "와퍼", "정식", "제육", "갈비", "보쌈", "육개장", "된장")) return "복리후생비";
         return "미분류";
     }
 
