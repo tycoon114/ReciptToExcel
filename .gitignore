@@ -1,0 +1,12 @@
+target/
+data/
+work/
+secrets/
+.idea/
+*.iml
+.env
+application-local.properties
+*.log
+*.mv.db
+*.trace.db
+service-account*.json

@@ -1,0 +1,9 @@
+# Copy to application-local.properties and restart the app.
+# Free local vision model (optional). Install Ollama and run: ollama pull gemma3:4b
+app.ollama-enabled=false
+app.ollama-url=http://127.0.0.1:11434
+app.ollama-model=gemma3:4b
+
+# Optional Google Sheets direct synchronization. Use forward slashes in Windows paths.
+app.sheets-id=
+app.sheets-credentials=./secrets/service-account.json
