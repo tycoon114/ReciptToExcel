@@ -1,9 +1,10 @@
-# Copy to application-local.properties and restart the app.
-# Free local vision model (optional). Install Ollama and run: ollama pull gemma3:4b
+# 이 파일을 application-local.properties로 복사한 뒤 설정을 수정하고 앱을 재시작하세요.
+# 선택 기능인 무료 로컬 이미지 모델입니다. Ollama 설치 후 ollama pull gemma3:4b를 실행하세요.
 app.ollama-enabled=false
 app.ollama-url=http://127.0.0.1:11434
 app.ollama-model=gemma3:4b
 
-# Optional Google Sheets direct synchronization. Use forward slashes in Windows paths.
+# 선택 기능인 구글 스프레드시트 직접 전송입니다. Windows 파일 경로에는 / 구분자를 권장합니다.
+# 문서 전체 주소 대신 문서 ID를 입력합니다. 개인 키 JSON은 secrets 폴더 등에 두고 Git에 올리지 않습니다.
 app.sheets-id=
 app.sheets-credentials=./secrets/service-account.json

@@ -12,9 +12,11 @@ import tools.jackson.databind.json.JsonMapper;
 import java.nio.file.*;
 import java.util.*;
 
+/** 도서 영수증의 권수·정가·실결제액·포인트 혼동과 사업자번호 보정의 재발을 검사합니다. */
 class BookReceiptTest {
     @ParameterizedTest
     @CsvSource({"1,11900", "1,25700", "1,38000", "2,41900", "2,43700"})
+    // 합계 행의 권수와 가격을 붙여 잘못된 큰 금액을 만들지 않는지 여러 금액으로 확인합니다.
     void summaryQuantityIsNeverConcatenatedWithThePrice(int quantity, long amount) {
         String digits = String.format(Locale.US, "%,d", amount);
         var a =
@@ -37,6 +39,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 정가·과세 소계·포인트보다 명시된 최종 결제액을 우선하는지 확인합니다.
     void discountedPaymentBeatsListPriceExemptTaxSubtotalAndPoints() {
         var a =
                 ReceiptTextParser.parse(
@@ -53,6 +56,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 반복 금액 보완은 유일한 요약 값일 때만 제안하고 원본 대조 근거를 안내하는지 확인합니다.
     void fadedBookSummaryNeedsUniqueRepetitionAndShowsItsBasis() {
         var a =
                 ReceiptTextParser.parse(
@@ -68,6 +72,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 짧은 OCR 잡음이 있어도 상품 가격 하나만으로 합계를 확정하지 않는지 확인합니다.
     void shortOcrDebrisMayPrecedeARepeatedSummaryButDoesNotMakeAnItemATotal() {
         assertEquals(
                 50000L,
@@ -75,11 +80,13 @@ class BookReceiptTest {
                         .amount());
         assertNull(ReceiptTextParser.parse("교보문고\n도서 1 18,000\n포인트 1,000", "").amount());
     }
+    // 포인트 잔액의 반복을 도서 결제 총액으로 오해하지 않는지 확인합니다.
     @Test void repeatedPointBalanceDoesNotBecomeTheBookTotal() {
         assertNull(ReceiptTextParser.parse("교보문고\n포인트 1,000\n1,000","").amount());
     }
 
     @Test
+    // 지점명과 괄호 오인식 때문에 음식점을 도서로 분류하지 않는지 확인합니다.
     void branchLocationAndBracketOcrDoNotTurnMealsIntoBooks() {
         var a =
                 ReceiptTextParser.parse(
@@ -92,6 +99,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 짧은 결제 표기는 지원하면서 권수·포인트·깨진 소수는 총액에서 제외하는지 확인합니다.
     void truncatedPaymentLabelStillDoesNotReadTheQuantityOrPoints() {
         var a = ReceiptTextParser.parse("상호:예시문고\n도서명\n결 제 38,000\n1 383000\n적립 포인트 결제 1,000", "");
         assertEquals(38000L, a.amount());
@@ -102,6 +110,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 같은 우선순위의 결제 금액이 다르면 빈 금액과 충돌 안내를 반환하는지 확인합니다.
     void conflictingFinalPaymentsAreNotSilentlySelected() {
         var a = ReceiptTextParser.parse("상호:예시문고\n카드결제 10,000\n승인금액 20,000", "");
         assertNull(a.amount());
@@ -109,6 +118,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 흐린 앞자리 보완은 별도의 권수·합계와 뒷자리가 맞을 때만 허용하는지 확인합니다.
     void damagedLeadingPaymentDigitNeedsAnIndependentQuantitySummary() {
         assertEquals(
                 41900L, ReceiptTextParser.parse("도서명\n가 드 결 제 : 식1,900\n2 41 ,900", "").amount());
@@ -117,6 +127,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 확정 상호가 재실행 후에도 같은 사업자번호에만 적용되고 모호한 번호는 학습하지 않는지 확인합니다.
     void confirmedBusinessNumberCorrectsFutureNamesAndPersists(@TempDir Path data)
             throws Exception {
         var mapper = JsonMapper.builder().build();
@@ -133,6 +144,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 다른 OCR 후보가 읽은 사업자번호로 선택한 후보의 상호를 보완할 수 있는지 확인합니다.
     void businessIdentityFromAnotherOcrPassCorrectsTheSelectedPass(@TempDir Path data)
             throws Exception {
         var mapper = JsonMapper.builder().build();
@@ -165,6 +177,7 @@ class BookReceiptTest {
     }
 
     @Test
+    // 도서인쇄비가 엑셀의 분류별 금액과 전체 합계에 모두 포함되는지 확인합니다.
     void bookletExportIncludesItsOwnSummaryAndTheGrandTotal() throws Exception {
         var e =
                 new Expense(

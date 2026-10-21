@@ -13,6 +13,10 @@ import java.util.*;
 
 import javax.imageio.ImageIO;
 
+/**
+ * 영수증 등록·회전·재분석·검토·확정의 업무 흐름을 조정합니다.
+ * 사진 파일과 DB의 관계를 관리하고, 확정 전 검증 및 중복·동시 수정 검사를 수행합니다.
+ */
 @Service
 public class ReceiptService {
     private final LedgerRepository repo;
@@ -21,6 +25,7 @@ public class ReceiptService {
     private final MerchantDirectory merchants;
     private final Path images;
 
+    /** 스프링이 필요한 객체와 데이터 폴더 설정을 주입하며, 증빙을 보관할 images 하위 폴더를 준비합니다. */
     public ReceiptService(
             LedgerRepository repo,
             ReceiptAnalyzer analyzer,
@@ -36,18 +41,22 @@ public class ReceiptService {
         Files.createDirectories(images);
     }
 
+    /** 등록된 내역과 중복 여부입니다. 중복 사진은 다시 분석하거나 새 행을 만들지 않습니다. */
     public record UploadResult(Expense expense, boolean duplicate) {}
 
+    /** 같은 파일이 동시에 등록되는 것을 줄이기 위해 중복 확인부터 저장까지 순서대로 처리합니다. */
     public synchronized UploadResult upload(MultipartFile file, String hint) throws Exception {
         if (file.isEmpty() || file.getSize() > 10 * 1024 * 1024)
             throw bad("10MB 이하의 JPG 또는 PNG 사진을 선택해 주세요.");
         if (hint.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
         byte[] bytes = file.getBytes();
+        // 원본 바이트의 SHA-256으로 중복을 판별하므로 같은 파일명이라도 내용이 다르면 새 사진입니다.
         String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         var existing = repo.byHash(hash);
         if (existing.isPresent()) return new UploadResult(existing.get(), true);
         Path path = null;
         try {
+            // 촬영 방향을 픽셀에 반영한 증빙 PNG를 저장한 뒤, 그 사진을 분석과 미리보기에 공통 사용합니다.
             var normalized = photos.normalize(bytes);
             String filename = UUID.randomUUID() + ".png";
             path = images.resolve(filename);
@@ -66,11 +75,13 @@ public class ReceiptService {
                                     Objects.toString(file.getOriginalFilename(), "receipt"), 255));
             return new UploadResult(saved, false);
         } catch (Exception e) {
+            // 등록이 끝나지 않은 사진만 되돌려 DB에 연결되지 않은 파일이 쌓이는 것을 줄입니다.
             if (path != null) Files.deleteIfExists(path);
             throw e;
         }
     }
 
+    /** 새 회전 이미지를 먼저 저장하고 DB 연결을 바꾼 뒤 이전 이미지를 정리합니다. */
     public synchronized Expense rotate(long id, int version, int quarterTurns) throws Exception {
         Expense current = repo.get(id);
         checkVersion(current, version);
@@ -85,7 +96,7 @@ public class ReceiptService {
                 rotated.flush();
             }
             Expense updated = repo.rotate(id, version, replacement.getFileName().toString());
-            // Remove only the obsolete image, after the DB points at the complete replacement.
+            // DB가 완성된 새 이미지를 가리킨 다음에만 이전 이미지를 삭제합니다.
             try {
                 Files.deleteIfExists(old);
             } catch (java.io.IOException ignored) {
@@ -99,12 +110,13 @@ public class ReceiptService {
         }
     }
 
+    /** 최신 사진을 재분석하고 직접 작성한 문맥은 보존합니다. 이전의 잘못된 도서 기본값은 재검토합니다. */
     public synchronized Expense reanalyze(long id, int version, String hint) {
         Expense current = repo.get(id);
         checkVersion(current, version);
         String purpose = hint == null ? current.description() : hint;
         if (purpose.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
-        // Old branch-substring classification supplied this default; do not feed it back as user intent.
+        // 이전 지점명 오분류가 만든 기본 적요를 사용자 업무 목적으로 재사용하면 같은 오류가 반복됩니다.
         boolean staleBookDefault = "OCR_RULES".equals(current.analysisSource())
                 && "도서인쇄비".equals(current.category()) && "도서 구입".equals(current.description())
                 && !ReceiptTextParser.book(Objects.toString(current.ocrText(), ""));
@@ -116,12 +128,14 @@ public class ReceiptService {
                 staleBookDefault && !"도서인쇄비".equals(analysis.category()));
     }
 
+    /** 화면을 연 뒤 다른 창에서 바뀐 내역을 덮어쓰지 못하게 저장 버전을 비교합니다. */
     private void checkVersion(Expense current, int version) {
         if (current.version() != version)
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "다른 창에서 수정되었습니다. 새로고침 후 다시 열어 주세요.");
     }
 
+    /** 직접 입력 내역은 증빙 파일·해시 없이 고유한 임시 이름으로 식별합니다. */
     public Expense manual() {
         return repo.insert(
                 new ReceiptAnalyzer.Analysis(
@@ -142,6 +156,7 @@ public class ReceiptService {
                 "manual-" + UUID.randomUUID());
     }
 
+    /** 분류·날짜·세액을 검증합니다. 필수 항목이 갖춰진 내역만 확정하고 거래처 보정을 기억합니다. */
     public Expense save(long id, ExpenseInput x) {
         if (!Set.of("REVIEW", "CONFIRMED").contains(x.status())) throw bad("잘못된 검토 상태입니다.");
         if (!ReceiptAnalyzer.CATEGORIES.contains(x.category())
@@ -153,6 +168,7 @@ public class ReceiptService {
             } catch (Exception e) {
                 throw bad("날짜를 YYYY-MM-DD 형식으로 입력해 주세요.");
             }
+        // 세액을 추정해 채우지 않습니다. 세 항목을 모두 입력한 경우에만 합계의 일치 여부를 검사합니다.
         if (x.amount() != null
                 && x.supplyAmount() != null
                 && x.vatAmount() != null
@@ -161,6 +177,7 @@ public class ReceiptService {
         if (x.supplyAmount() != null && x.amount() != null && x.supplyAmount() > x.amount()
                 || x.vatAmount() != null && x.amount() != null && x.vatAmount() > x.amount())
             throw bad("공급가액 또는 부가세가 총금액보다 큽니다.");
+        // 검토 중에는 미확인 항목을 허용하지만, 엑셀 집계에 들어가는 확정 건은 필수 값을 요구합니다.
         if (x.status().equals("CONFIRMED")
                 && (x.receiptDate() == null
                         || x.receiptDate().isBlank()
@@ -172,6 +189,7 @@ public class ReceiptService {
         Expense updated = repo.update(id, x);
         if (updated.status().equals("CONFIRMED"))
             try {
+                // 사용자가 확정한 거래처만 기억하며, 사전 저장 실패가 장부 저장 성공을 취소하지는 않습니다.
                 merchants.remember(Objects.toString(updated.ocrText(), ""), updated.vendor());
             } catch (Exception e) {
                 org.slf4j.LoggerFactory.getLogger(ReceiptService.class)
@@ -180,6 +198,7 @@ public class ReceiptService {
         return updated;
     }
 
+    /** DB의 상대 파일명을 실제 경로로 해석하고 증빙 폴더 밖으로 벗어나는 접근을 차단합니다. */
     public Path image(long id) {
         var e = repo.get(id);
         if (e.imagePath() == null)
@@ -190,6 +209,7 @@ public class ReceiptService {
         return path;
     }
 
+    /** 내역 삭제 후 연결 사진을 정리합니다. 파일 삭제 범위는 증빙 폴더 내부로 제한합니다. */
     public synchronized void delete(long id) throws Exception {
         var e = repo.get(id);
         repo.delete(id);
@@ -199,6 +219,7 @@ public class ReceiptService {
         }
     }
 
+    /** 장부 조회·엑셀 출력에서 공통으로 사용하는 필터입니다. 미확인 날짜·금액은 정렬 뒤쪽에 둡니다. */
     public List<Expense> filter(
             String month, String category, String query, String status, String sort) {
         if (month != null && !month.isBlank())
@@ -207,6 +228,7 @@ public class ReceiptService {
             } catch (Exception e) {
                 throw bad("조회 월 형식이 올바르지 않습니다.");
             }
+        // 검색 대상에는 거래처뿐 아니라 적요·비고·사용자·부서도 포함합니다.
         String q = query == null ? "" : query.toLowerCase(Locale.ROOT);
         Comparator<Expense> order =
                 switch (Objects.toString(sort, "dateDesc")) {
@@ -258,6 +280,7 @@ public class ReceiptService {
                 .toList();
     }
 
+    /** 사용자가 입력이나 설정을 고칠 수 있는 문제를 400 오류로 표현합니다. */
     static ResponseStatusException bad(String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }

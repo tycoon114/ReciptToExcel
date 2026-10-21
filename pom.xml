@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
+  <!-- 스프링 부트가 호환되는 라이브러리와 빌드 플러그인 버전의 기준을 제공합니다. -->
   <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>4.0.8</version><relativePath/></parent>
   <groupId>kr.local</groupId><artifactId>receipt-to-excel</artifactId><version>0.1.0</version>
   <name>ReceiptToExcel</name><description>Local receipt review and expense ledger</description>
+  <!-- Java 17을 기준으로 소스와 실행 바이트코드를 빌드합니다. -->
   <properties><java.version>17</java.version></properties>
+  <!-- 웹 API·입력 검증·로컬 H2 저장·엑셀 생성·사진 방향 해석에 필요한 의존성입니다. -->
   <dependencies>
     <dependency><groupId>com.drewnoakes</groupId><artifactId>metadata-extractor</artifactId><version>2.21.0</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-webmvc</artifactId></dependency>
@@ -14,5 +17,6 @@
     <dependency><groupId>org.apache.poi</groupId><artifactId>poi-ooxml</artifactId><version>5.5.1</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
   </dependencies>
+  <!-- 내장 웹 서버와 의존 라이브러리를 포함해 java -jar로 실행할 수 있는 JAR를 만듭니다. -->
   <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>
 </project>

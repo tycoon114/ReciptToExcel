@@ -1,12 +1,18 @@
+# 빌드 결과와 실행 중 생성되는 개인 장부·증빙·분석 임시 파일은 저장소에서 제외합니다.
 target/
 data/
 work/
+# 서비스 계정 키와 개인 연결 설정 등 인증 자료는 Git에 올리지 않습니다.
 secrets/
+# 각 개발자의 IntelliJ 설정은 공유 소스와 분리합니다.
 .idea/
 *.iml
+# 환경변수와 개인 연결 설정도 인증 정보가 들어갈 수 있으므로 제외합니다.
 .env
 application-local.properties
+# 운영 로그와 H2 데이터 파일이 다른 폴더에 생성되어도 추적하지 않습니다.
 *.log
 *.mv.db
 *.trace.db
+# 서비스 계정 키의 파일명이 달라도 이 패턴에 해당하면 추적하지 않습니다.
 service-account*.json

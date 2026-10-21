@@ -13,8 +13,10 @@ import java.net.*;
 import java.nio.file.*;
 import java.util.Map;
 
+/** 문자 파싱과 선택적 로컬 AI 연결 형식을 검증합니다. 실제 AI 모델 대신 로컬 HTTP 응답을 사용합니다. */
 class ReceiptAnalyzerTest {
     @Test
+    // 공백이 많은 상호·합계·세액 표기를 읽고, 표기가 없는 세액은 추정하지 않는지 확인합니다.
     void spacedPrintedLabelsAndExplicitMerchantAreRecognized() {
         var mapper = JsonMapper.builder().build();
         var analyzer =
@@ -47,6 +49,7 @@ class ReceiptAnalyzerTest {
     }
 
     @Test
+    // 날짜·금액·업무 목적을 읽되 잘못된 날짜와 승인번호를 거래 정보로 채택하지 않는지 확인합니다.
     void explicitReceiptValuesAreParsedWithoutInventingTax() {
         var mapper = JsonMapper.builder().build();
         var analyzer =
@@ -74,6 +77,7 @@ class ReceiptAnalyzerTest {
     }
 
     @Test
+    // 사진과 JSON 응답 요청을 보내는지, AI가 반환한 문자열 세액을 숫자로 강제하지 않는지 확인합니다.
     void localAiUsesVisionPayloadAndRejectsInventedStringAmounts(@TempDir Path temp)
             throws Exception {
         var mapper = JsonMapper.builder().build();

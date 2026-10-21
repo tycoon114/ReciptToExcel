@@ -11,8 +11,10 @@ import java.nio.file.*;
 
 import javax.imageio.ImageIO;
 
+/** OCR 전처리가 종이 영역을 유지하고 저장된 증빙 파일을 변경하지 않는지 검증합니다. */
 class ReceiptOcrImagesTest {
     @Test
+    // 합성 영수증의 배경은 줄이되 종이의 가장자리와 본문은 잘라내지 않는지 확인합니다.
     void paperCropKeepsTheWholeReceiptWhileExcludingItsBackground() {
         var image = new BufferedImage(400, 600, BufferedImage.TYPE_INT_RGB);
         var g = image.createGraphics();
@@ -30,6 +32,7 @@ class ReceiptOcrImagesTest {
     }
 
     @Test
+    // 분석 사본을 생성한 뒤 원본 파일 바이트가 동일한지 확인합니다.
     void ocrPreparationKeepsTheStoredEvidenceUnmodified(@TempDir Path data) throws Exception {
         Path source = data.resolve("photo.png");
         var image = new BufferedImage(200, 300, BufferedImage.TYPE_INT_RGB);

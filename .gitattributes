@@ -1,3 +1,4 @@
+# 소스는 LF, Windows 실행 스크립트는 CRLF로 관리하여 운영체제 간 줄바꿈 차이를 줄입니다.
 * text=auto
 *.java text eol=lf
 *.md text eol=lf

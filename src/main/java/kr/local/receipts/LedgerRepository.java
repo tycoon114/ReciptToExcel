@@ -9,9 +9,14 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.*;
 
+/**
+ * H2 장부 테이블을 JDBC로 읽고 씁니다.
+ * SQL의 물음표에 값을 바인딩하며, version 조건으로 오래된 화면의 수정 요청을 거절합니다.
+ */
 @Repository
 public class LedgerRepository {
     private final JdbcTemplate db;
+    // DB 열 이름과 응답 모델의 필드를 한곳에서 대응시킵니다. 미확인 금액은 0이 아닌 null입니다.
     private static final RowMapper<Expense> MAPPER =
             (r, n) ->
                     new Expense(
@@ -41,11 +46,13 @@ public class LedgerRepository {
         this.db = db;
     }
 
+    /** 기본 장부 목록을 가져옵니다. 상세 조회 조건은 서비스에서 적용합니다. */
     public List<Expense> all() {
         return db.query(
                 "SELECT * FROM expenses ORDER BY receipt_date DESC NULLS LAST, id DESC", MAPPER);
     }
 
+    /** 관리 ID에 해당하는 내역이 없으면 404 오류로 응답합니다. */
     public Expense get(long id) {
         return db.query("SELECT * FROM expenses WHERE id=?", MAPPER, id).stream()
                 .findFirst()
@@ -53,11 +60,13 @@ public class LedgerRepository {
                         () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "영수증을 찾을 수 없습니다."));
     }
 
+    /** 같은 원본 사진이 이미 등록되어 있는지 해시로 조회합니다. */
     public Optional<Expense> byHash(String hash) {
         return db.query("SELECT * FROM expenses WHERE image_hash=?", MAPPER, hash).stream()
                 .findFirst();
     }
 
+    /** 분석 결과를 새 행으로 저장합니다. 검토 상태·버전·빈 사용자 정보는 스키마 기본값을 사용합니다. */
     public Expense insert(ReceiptAnalyzer.Analysis a, String imagePath, String hash, String name) {
         db.update(
                 "INSERT INTO"
@@ -80,11 +89,11 @@ public class LedgerRepository {
                 name,
                 Instant.now().toString());
         if (hash != null) return byHash(hash).orElseThrow();
-        // Manual entries use their unique generated name as a lookup key, without a shared
-        // last-insert-id.
+        // 수동 입력은 고유한 임시 이름으로 조회하여 다른 요청의 마지막 삽입 ID와 섞이지 않게 합니다.
         return db.query("SELECT * FROM expenses WHERE original_name=?", MAPPER, name).get(0);
     }
 
+    /** ID와 기존 버전이 모두 맞을 때만 수정하고 버전을 증가시킵니다. */
     public Expense update(long id, ExpenseInput x) {
         int count =
                 db.update(
@@ -107,6 +116,7 @@ public class LedgerRepository {
                         x.status(),
                         id,
                         x.version());
+        // 행이 사라진 경우는 404, 존재하지만 버전이 달라진 경우는 409로 구분합니다.
         if (count == 0) {
             get(id);
             throw new ResponseStatusException(
@@ -115,11 +125,13 @@ public class LedgerRepository {
         return get(id);
     }
 
+    /** 존재 여부를 먼저 확인한 뒤 장부 행을 삭제합니다. 파일 정리는 서비스가 담당합니다. */
     public void delete(long id) {
         get(id);
         db.update("DELETE FROM expenses WHERE id=?", id);
     }
 
+    /** 증빙 파일 연결만 교체하고 버전을 올립니다. 장부의 입력 필드는 그대로 둡니다. */
     public Expense rotate(long id, int version, String path) {
         int count =
                 db.update(
@@ -134,6 +146,7 @@ public class LedgerRepository {
         return get(id);
     }
 
+    /** 재인식 필드를 갱신합니다. 비어 있거나 잘못된 도서 기본값인 적요·비고만 제안으로 대체합니다. */
     public Expense reanalyze(long id, int version, ReceiptAnalyzer.Analysis a, boolean clearBookDefault) {
         int count =
                 db.update(
