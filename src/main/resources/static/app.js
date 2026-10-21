@@ -72,11 +72,32 @@ async function upload(files) {
       notice(`사진을 인식하고 있습니다 (${i+1}/${selected.length}). `+(config.aiEnabled?"로컬 AI는 사진당 최대 약 3분이 걸릴 수 있습니다.":"잠시 기다려 주세요."));
       if(file.size>10*1024*1024) { errors.push(file.name+": 10MB 초과"); continue; }
       const data=new FormData(); data.append("file",file); data.append("hint",$("upload-hint").value.trim());
-      try { const result=await api("/api/receipts",{method:"POST",body:data}); latest=result.expense; result.duplicate?duplicate++:saved++; }
+      try {
+            const result=await api("/api/receipts",
+                {method:"POST",body:data});
+
+            if(result.duplicate){
+              duplicate++;
+
+              //중복된 사진 알리기
+              if(selected.length===1){
+                alert(`${file.name}\n이미 등록된 영수증입니다. 추가 등록하지 않았습니다.`);
+              }
+            }else{
+                saved++;
+
+                //신규 등록 영수증만 검토창 열기
+                latest = result.expense;
+            }
+      }
       catch(error) { errors.push(file.name+": "+error.message); }
     }
     await load();
-    notice(`신규 등록 ${saved}건 · 중복 ${duplicate}건`+(errors.length?"\n"+errors.join("\n"):". 원본과 인식 내용을 확인한 뒤 확정해 주세요."),!!errors.length);
+    notice(
+        `신규 등록 ${saved}건 · 중복으로 등록 제외 ${duplicate}건` +
+        (errors.length ? "\n" + errors.join("\n") : ""),
+        errors.length > 0
+    );
     if(selected.length===1 && latest) openEditor(latest);
   } catch(error) { notice(error.message,true); }
   finally { uploading=false; $("receipt-files").disabled=false; $("receipt-files").value=""; $("upload-label").textContent="사진을 끌어 놓거나 선택하세요"; }
