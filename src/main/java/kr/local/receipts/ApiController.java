@@ -64,6 +64,10 @@ public class ApiController {
         return service.filter(month, category, query, status, sort);
     }
 
+    /** 기장 목록에서 연결된 영수증을 다시 열 때 사용하는 단건 조회입니다. */
+    @GetMapping("/expenses/{id}")
+    public Expense get(@PathVariable long id) { return repo.get(id); }
+
     /** 사진과 업무 목적을 받아 분석한 뒤 검토 대기로 등록합니다. 중복이면 기존 내역을 돌려줍니다. */
     @PostMapping(value = "/receipts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ReceiptService.UploadResult upload(

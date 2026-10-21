@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -94,7 +95,9 @@ public class LedgerRepository {
     }
 
     /** ID와 기존 버전이 모두 맞을 때만 수정하고 버전을 증가시킵니다. */
+    @Transactional
     public Expense update(long id, ExpenseInput x) {
+        requireEditable(id, false);
         int count =
                 db.update(
                         "UPDATE expenses SET"
@@ -126,13 +129,16 @@ public class LedgerRepository {
     }
 
     /** 존재 여부를 먼저 확인한 뒤 장부 행을 삭제합니다. 파일 정리는 서비스가 담당합니다. */
+    @Transactional
     public void delete(long id) {
-        get(id);
+        requireEditable(id, true);
         db.update("DELETE FROM expenses WHERE id=?", id);
     }
 
     /** 증빙 파일 연결만 교체하고 버전을 올립니다. 장부의 입력 필드는 그대로 둡니다. */
+    @Transactional
     public Expense rotate(long id, int version, String path) {
+        requireEditable(id, false);
         int count =
                 db.update(
                         "UPDATE expenses SET image_path=?,version=version+1 WHERE id=? AND"
@@ -147,7 +153,9 @@ public class LedgerRepository {
     }
 
     /** 재인식 필드를 갱신합니다. 비어 있거나 잘못된 도서 기본값인 적요·비고만 제안으로 대체합니다. */
+    @Transactional
     public Expense reanalyze(long id, int version, ReceiptAnalyzer.Analysis a, boolean clearBookDefault) {
+        requireEditable(id, false);
         int count =
                 db.update(
                         "UPDATE expenses SET receipt_date=?,vendor=?,category=?,description=CASE"
@@ -175,5 +183,33 @@ public class LedgerRepository {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "다른 창에서 수정되었습니다. 새로고침 후 다시 열어 주세요.");
         return get(id);
+    }
+
+    /** 기장과 수정이 동시에 진행되어도 같은 영수증 행의 잠금을 공유합니다. 호출자는 트랜잭션 안에 있어야 합니다. */
+    public Expense lock(long id) {
+        return db.query("SELECT * FROM expenses WHERE id=? FOR UPDATE", MAPPER, id).stream()
+                .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "영수증을 찾을 수 없습니다."));
+    }
+
+    /** 오래 걸리는 OCR나 이미지 저장 전에 안내합니다. 최종 변경 시에는 행 잠금 후 다시 검사합니다. */
+    public void assertNotPosted(long id) {
+        if (db.queryForObject("SELECT COUNT(*) FROM bookkeeping_entries WHERE active_expense_id=?",Long.class,id) > 0)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"기장된 영수증입니다. 기장을 취소한 뒤 수정·회전·재인식할 수 있습니다.");
+    }
+
+    /** 취소된 전표라도 기장 당시 사진을 다시 열 수 있도록 참조 중인 파일은 정리하지 않습니다. */
+    public boolean isBookkeepingEvidence(String filename) {
+        return db.queryForObject("SELECT COUNT(*) FROM bookkeeping_entries WHERE image_path=?",Long.class,filename)>0;
+    }
+
+    /** 기장된 원본을 바꾸려면 먼저 전표를 취소해야 하며, 이력이 있는 증빙은 삭제하지 않습니다. */
+    private void requireEditable(long id, boolean deleting) {
+        lock(id);
+        Long count = db.queryForObject(deleting
+                ? "SELECT COUNT(*) FROM bookkeeping_entries WHERE expense_id=?"
+                : "SELECT COUNT(*) FROM bookkeeping_entries WHERE active_expense_id=?", Long.class, id);
+        if (count != null && count > 0) throw new ResponseStatusException(HttpStatus.CONFLICT, deleting
+                ? "기장 이력이 있는 영수증은 증빙 보존을 위해 삭제할 수 없습니다. 전표를 취소하여 집계에서 제외하세요."
+                : "기장된 영수증입니다. 기장을 취소한 뒤 수정·회전·재인식할 수 있습니다.");
     }
 }

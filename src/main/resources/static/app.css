@@ -15,3 +15,23 @@ dialog{border:1px solid #d9e1ed;border-radius:15px;padding:0;color:var(--ink);wi
 @media(min-width:1600px){main{padding:40px 60px}.upload-controls{padding:26px 40px}}@media(max-width:1200px){.sidebar{width:195px;padding:28px 17px}main{margin-left:195px;padding:28px 24px}.filters{flex-wrap:wrap}.filters label{min-width:125px}.stats{gap:10px}.stats article{padding:16px}.table-footer{flex-wrap:wrap}}@media(max-width:850px){.sidebar{position:static;width:auto;padding:14px 20px}.brand{font-size:16px}.brand-mark{width:30px;height:33px;font-size:20px}.workspace,.sidebar-bottom,nav{display:none}main{margin-left:0;padding:24px 17px}.upload-section{grid-template-columns:1fr 1.15fr}.upload-intro{padding:25px}.upload-intro h2{font-size:25px}.upload-controls{padding:20px}.steps{gap:7px;font-size:9px}.stats{grid-template-columns:repeat(2,1fr)}.editor-grid{grid-template-columns:1fr}.preview-panel{border-right:0;border-bottom:1px solid var(--line)}#receipt-preview{max-height:240px}.preview-panel pre{max-height:100px}.page-footer{flex-wrap:wrap}}@media(max-width:560px){header{align-items:start;flex-direction:column}h1{font-size:25px}.upload-section{grid-template-columns:1fr}.upload-intro h2 br{display:none}.upload-intro{padding:22px}.upload-intro p br{display:none}.steps{margin-top:13px}.section-heading{padding:20px;align-items:start;flex-direction:column}.filters{padding:0 20px 20px}.form-grid{gap:10px}#edit-form{padding:18px}.editor-actions{flex-wrap:wrap}.editor-actions .primary{width:100%}.page-footer{font-size:8px}.stats strong{font-size:23px}.table-footer{font-size:9px}}
 /* 사진 회전·재인식 버튼: 좁은 폭에서도 버튼을 다음 줄로 넘길 수 있게 합니다. */
 .photo-tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.photo-tools .button{font-size:10px;padding:6px 9px;min-height:32px}
+
+/* 기장 화면: 영수증 검토와 구분하면서 기존 장부의 색상·표·버튼 규칙을 공유합니다. */
+.bookkeeping-section{margin-top:28px;scroll-margin-top:24px}
+.book-summary{display:flex;flex-wrap:wrap;gap:14px 30px;padding:0 25px 24px;color:#718197;font-size:12px}
+.book-summary strong{margin-left:8px;color:var(--navy);font-size:17px}
+.book-empty,.book-scope{padding:16px 25px;margin:0;color:#78879b;font-size:12px}
+.book-scope{border-top:1px solid var(--line);background:#f9fbfe;border-radius:0 0 15px 15px;font-size:11px}
+.book-cancelled-row{background:#fafafa;color:#8791a0}
+.book-panel{border:1px solid #d7e3f5;border-radius:10px;background:#f7faff;padding:18px;margin-top:22px}
+.book-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.book-panel h3{font-size:15px;margin:0}
+.book-panel .table-scroll{border:1px solid var(--line);border-radius:7px;background:white;margin:12px 0}
+.book-preview-table{min-width:0;width:100%}
+.book-preview-table th,.book-preview-table td{padding:8px 10px;font-size:11px}
+.book-panel .form-note{color:#677c97;overflow-wrap:anywhere;line-height:1.7}
+.book-panel input:disabled,.book-panel select:disabled,#edit-form input:disabled,#edit-form textarea:disabled,#edit-form select:disabled{background:#edf1f7;color:#68778c}
+#book-post{margin-top:7px}
+#book-cancel-panel{margin-top:16px;padding-top:14px;border-top:1px solid #d7e3f5}
+#book-cancel{margin-top:12px}
+@media(max-width:560px){.book-panel{padding:13px}.book-summary{gap:10px 18px}.book-summary strong{font-size:15px}.bookkeeping-section .section-heading .button{align-self:flex-start}}

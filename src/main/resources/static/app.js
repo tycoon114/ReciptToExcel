@@ -22,9 +22,10 @@ function filters() { return new URLSearchParams({month:$("filter-month").value,c
 // 빠르게 필터를 바꿔도 늦게 도착한 과거 응답이 최신 목록을 덮어쓰지 않게 요청 번호를 비교합니다.
 async function load() {
   const revision = ++loadRevision;
-  const result = await api("/api/expenses?"+filters());
+  const [result, bookEntries] = await Promise.all([api("/api/expenses?"+filters()),api("/api/bookkeeping/entries")]);
   if (revision !== loadRevision) return;
-  rows = result; render();
+  BookkeepingUI.setEntries(bookEntries);
+  rows = result; render();BookkeepingUI.renderJournal();
   // 엑셀은 상태 필터와 관계없이 확정 건만 출력하므로 조회 상태만 다운로드 조건에서 뺍니다.
   const params = filters(); params.delete("status"); $("export-link").href = "/api/export.xlsx?"+params;
 }
@@ -41,7 +42,7 @@ function render() {
     const vendor = cell(expense.vendor || "거래처 미확인"); const description = document.createElement("small"); description.textContent = expense.description || "적요를 입력해 주세요"; vendor.append(description); tr.append(vendor);
     const category = cell(""); const tag = document.createElement("span"); tag.className="category-tag"; tag.textContent=expense.category; category.append(tag); tr.append(category);
     const note = cell(expense.note || "—"); note.title=expense.note; tr.append(note,cell(expense.paymentMethod),cell(money(expense.amount)+(expense.amount==null?"":" 원"),"numeric"));
-    const status = cell(""); const badge = document.createElement("span"); badge.className="badge"+(expense.status==="CONFIRMED"?"":" review"); badge.textContent=expense.status==="CONFIRMED"?"확정":"검토 대기"; status.append(badge); tr.append(status);
+    const status = cell(""); const badge = document.createElement("span"); badge.className="badge"+(expense.status==="CONFIRMED"?"":" review"); badge.textContent=expense.status==="CONFIRMED"?"확정":"검토 대기"; status.append(badge); tr.append(status,BookkeepingUI.statusCell(expense));
     const action=cell(""); const button=document.createElement("button"); button.className="text-button"; button.textContent="검토 →"; button.setAttribute("aria-label",(expense.vendor||"영수증")+" 검토"); action.append(button); tr.append(action);
     tr.addEventListener("click",()=>openEditor(expense)); body.append(tr);
   }
@@ -59,6 +60,7 @@ function openEditor(expense) {
   if(expense.imagePath) { $("receipt-preview").src=`/api/expenses/${expense.id}/image?v=${expense.version}`; $("original-link").href=`/api/expenses/${expense.id}/image?v=${expense.version}`; } else $("receipt-preview").removeAttribute("src");
   $("analysis-source").textContent=expense.analysisSource==="OLLAMA"?"로컬 AI 분석":expense.analysisSource==="OCR_RULES"?"기본 모드 · Windows OCR + 규칙 분류":"직접 입력";
   $("analysis-message").textContent=expense.analysisMessage; $("ocr-text").textContent=expense.ocrText||"인식된 원문이 없습니다."; $("edit-error").hidden=true;
+  BookkeepingUI.open(expense);
   if(!$("editor").open) $("editor").showModal();
 }
 // 여러 사진은 순서대로 업로드합니다. 개별 실패가 있어도 나머지 사진을 계속 처리하고 결과를 합쳐 안내합니다.
@@ -113,8 +115,8 @@ $("reset-button").addEventListener("click",()=>{$("filters").reset();load().catc
 for(const id of ["filter-month","filter-category","filter-status","filter-sort"]) $(id).addEventListener("change",()=>load().catch(e=>notice(e.message,true)));
 $("refresh-button").addEventListener("click",()=>load().catch(e=>notice(e.message,true)));
 $("manual-button").addEventListener("click",async()=>{try { const expense=await api("/api/expenses",{method:"POST"}); await load(); openEditor(expense); } catch(e) { notice(e.message,true); }});
-document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>$("editor").close()));
-$("editor").addEventListener("cancel",e=>{if(photoBusy)e.preventDefault();});
+document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>{if(!photoBusy && !BookkeepingUI.isBusy())$("editor").close();}));
+$("editor").addEventListener("cancel",e=>{if(photoBusy || BookkeepingUI.isBusy())e.preventDefault();});
 // 회전은 입력 초안을 모두 보존하고, 재인식은 직접 작성한 문맥을 보존하면서 추출 필드만 갱신합니다.
 async function photoAction(action, quarterTurns=0) {
   if(photoBusy)return;
@@ -138,7 +140,7 @@ async function photoAction(action, quarterTurns=0) {
     for(const [field,value] of Object.entries(draft))$("edit-"+field).value=value;
     if(action==="rotate")$("analysis-message").textContent="사진 방향을 저장했습니다. ‘사진 다시 읽기’로 인식을 다시 실행할 수 있습니다.";
   } catch(error) {$("edit-error").textContent=error.message;$("edit-error").hidden=false;}
-  finally {photoBusy=false;controls.forEach(control=>control.disabled=false);}
+  finally {photoBusy=false;controls.forEach(control=>control.disabled=false);BookkeepingUI.applyLocks();}
 }
 $("rotate-left").addEventListener("click",()=>photoAction("rotate",-1));
 $("rotate-right").addEventListener("click",()=>photoAction("rotate",1));
@@ -150,7 +152,7 @@ $("edit-form").addEventListener("submit",async e=>{
   const buttons=Array.from($("edit-form").querySelectorAll("button")); buttons.forEach(b=>b.disabled=true);
   try { await api("/api/expenses/"+$("edit-id").value,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}); $("editor").close(); await load(); notice(data.status==="CONFIRMED"?"영수증을 확정했습니다. 장부와 엑셀 내보내기에 반영됩니다.":"검토 대기로 저장했습니다."); }
   catch(error) { $("edit-error").textContent=error.message; $("edit-error").hidden=false; }
-  finally { buttons.forEach(b=>b.disabled=false); }
+  finally { buttons.forEach(b=>b.disabled=false);BookkeepingUI.applyLocks(); }
 });
 // 삭제는 선택 내역과 증빙 사진을 함께 없애므로 사용자 확인을 받은 뒤 요청합니다.
 $("delete-button").addEventListener("click",async()=>{if(!confirm("이 영수증 내역과 사진을 삭제할까요?"))return;try { await api("/api/expenses/"+$("edit-id").value,{method:"DELETE"}); $("editor").close(); await load(); notice("영수증을 삭제했습니다."); } catch(e) { $("edit-error").textContent=e.message; $("edit-error").hidden=false; }});
@@ -168,7 +170,7 @@ async function init() {
   try { config=await api("/api/config"); options($("filter-category"),config.categories); options($("edit-category"),config.categories); options($("edit-paymentMethod"),config.payments);
     $("mode-label").textContent=config.aiEnabled?"로컬 AI 연결 모드 · "+config.aiModel:"무료 기본 모드 · OCR + 규칙";
     $("sheets-state").textContent=config.sheetsConfigured?"직접 연결 설정됨":"파일 가져오기"; $("sync-button").textContent=config.sheetsConfigured?"전체 확정 장부 전송 ↗":"연결 및 전송 안내 ↗";
-    await load();
+    await BookkeepingUI.init();await load();
   } catch(e) { notice("앱을 불러오지 못했습니다. "+e.message,true); }
 }
 init();

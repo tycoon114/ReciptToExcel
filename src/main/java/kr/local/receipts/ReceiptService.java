@@ -85,6 +85,7 @@ public class ReceiptService {
     public synchronized Expense rotate(long id, int version, int quarterTurns) throws Exception {
         Expense current = repo.get(id);
         checkVersion(current, version);
+        repo.assertNotPosted(id);
         Path old = image(id), replacement = images.resolve(UUID.randomUUID() + ".png");
         var source = ImageIO.read(old.toFile());
         if (source == null) throw bad("사진을 읽을 수 없습니다.");
@@ -98,8 +99,9 @@ public class ReceiptService {
             Expense updated = repo.rotate(id, version, replacement.getFileName().toString());
             // DB가 완성된 새 이미지를 가리킨 다음에만 이전 이미지를 삭제합니다.
             try {
-                Files.deleteIfExists(old);
-            } catch (java.io.IOException ignored) {
+                if (!repo.isBookkeepingEvidence(old.getFileName().toString())) Files.deleteIfExists(old);
+            } catch (Exception ignored) {
+                // 이전 사진 정리 실패 때문에 이미 완료된 새 증빙 연결을 되돌리지는 않습니다.
             }
             return updated;
         } catch (Exception e) {
@@ -114,6 +116,7 @@ public class ReceiptService {
     public synchronized Expense reanalyze(long id, int version, String hint) {
         Expense current = repo.get(id);
         checkVersion(current, version);
+        repo.assertNotPosted(id);
         String purpose = hint == null ? current.description() : hint;
         if (purpose.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
         // 이전 지점명 오분류가 만든 기본 적요를 사용자 업무 목적으로 재사용하면 같은 오류가 반복됩니다.
