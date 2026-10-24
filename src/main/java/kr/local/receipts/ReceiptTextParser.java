@@ -50,6 +50,7 @@ final class ReceiptTextParser {
             } catch (Exception ignored) {
             }
         Total total = total(text);
+        var approval = ApprovalNumberParser.parse(text);
         Long supply = tax(text, SUPPLY), vat = tax(text, VAT);
         String category = ReceiptAnalyzer.classify(text + " " + hint);
         String compact = text.replaceAll("\\s", "");
@@ -66,8 +67,9 @@ final class ReceiptTextParser {
                 payment,
                 description,
                 "OCR_RULES",
-                "규칙 기반 제안입니다. 업무 목적을 확인해 주세요. " + total.warning(),
-                text);
+                "규칙 기반 제안입니다. 업무 목적을 확인해 주세요. " + total.warning() + " " + approval.warning(),
+                text,
+                approval.value());
     }
 
     /** 전처리 후보 비교용 점수입니다. 확률이나 정확도 백분율이 아니며 금액·날짜·세액 근거를 가산합니다. */

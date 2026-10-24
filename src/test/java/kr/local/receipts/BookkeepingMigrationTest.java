@@ -17,13 +17,18 @@ class BookkeepingMigrationTest {
         }
         var dataSource=new DriverManagerDataSource("jdbc:h2:mem:bookkeeping-migration;DB_CLOSE_DELAY=-1","sa","");
         var db=new JdbcTemplate(dataSource);
-        run(dataSource,script.split("-- 영수증 지출 전표",2)[0]);
+        // 새 열 추가 구문을 제외하여 실제 업데이트 전 구조를 재현합니다.
+        run(dataSource,script.split("-- 기존 장부도",2)[0]);
         db.update("INSERT INTO expenses(id,vendor,amount,created_at) VALUES(?,?,?,?)",77,"이전 장부",12345,"2026-10-19T00:00:00Z");
         run(dataSource,script);run(dataSource,script);
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM expenses",Integer.class));
         assertEquals("이전 장부",db.queryForObject("SELECT vendor FROM expenses WHERE id=77",String.class));
         assertEquals(12345L,db.queryForObject("SELECT amount FROM expenses WHERE id=77",Long.class));
         assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM bookkeeping_entries",Integer.class));
+        assertEquals("",db.queryForObject("SELECT approval_number FROM expenses WHERE id=77",String.class));
+        db.update("UPDATE expenses SET approval_number='00001234' WHERE id=77");
+        run(dataSource,script);
+        assertEquals("00001234",db.queryForObject("SELECT approval_number FROM expenses WHERE id=77",String.class));
     }
     private void run(DriverManagerDataSource source,String sql) {
         var scripts=new ResourceDatabasePopulator(new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8)));

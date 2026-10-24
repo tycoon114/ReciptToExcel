@@ -153,6 +153,7 @@ public class ReceiptService {
                         "",
                         "MANUAL",
                         "직접 입력한 영수증입니다.",
+                        "",
                         ""),
                 null,
                 null,
@@ -231,7 +232,7 @@ public class ReceiptService {
             } catch (Exception e) {
                 throw bad("조회 월 형식이 올바르지 않습니다.");
             }
-        // 검색 대상에는 거래처뿐 아니라 적요·비고·사용자·부서도 포함합니다.
+        // 검색 대상에는 거래처뿐 아니라 적요·비고·사용자·부서·승인번호도 포함합니다.
         String q = query == null ? "" : query.toLowerCase(Locale.ROOT);
         Comparator<Expense> order =
                 switch (Objects.toString(sort, "dateDesc")) {
@@ -276,7 +277,7 @@ public class ReceiptService {
                                                 + " "
                                                 + e.ownerName()
                                                 + " "
-                                                + e.department())
+                                                + e.department() + " " + e.approvalNumber())
                                         .toLowerCase(Locale.ROOT)
                                         .contains(q))
                 .sorted(order.thenComparing(Expense::id))

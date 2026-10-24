@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <!-- 스프링 부트가 호환되는 라이브러리와 빌드 플러그인 버전의 기준을 제공합니다. -->
   <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>4.0.8</version><relativePath/></parent>
-  <groupId>kr.local</groupId><artifactId>receipt-to-excel</artifactId><version>0.1.0</version>
+  <groupId>kr.local</groupId><artifactId>receipt-to-excel</artifactId><version>0.2.0</version>
   <name>ReceiptToExcel</name><description>Local receipt review and expense ledger</description>
   <!-- Java 17을 기준으로 소스와 실행 바이트코드를 빌드합니다. -->
   <properties><java.version>17</java.version></properties>

@@ -19,7 +19,7 @@ public class ExcelExporter {
     public static final List<String> HEADERS =
             List.of(
                     "관리ID", "지출일자", "거래처", "계정과목", "적요", "총금액(원)", "공급가액(원)", "부가세(원)", "결제수단",
-                    "사용자", "부서", "비고", "검토상태", "분석방식", "원본파일명");
+                    "사용자", "부서", "비고", "검토상태", "분석방식", "원본파일명", "승인번호");
 
     /** template이 참이면 200행 입력 양식을, 거짓이면 전달받은 내역의 장부와 집계를 생성합니다. */
     public byte[] export(List<Expense> expenses, boolean template) throws IOException {
@@ -40,11 +40,16 @@ public class ExcelExporter {
             CellStyle editable = book.createCellStyle();
             editable.cloneStyleFrom(text);
             editable.setFont(font(book, 10, false, "1D4ED8"));
+            // 승인번호 열은 빈 양식에 직접 입력할 때도 앞자리 0이 사라지지 않게 텍스트 서식을 사용합니다.
+            CellStyle identifier = book.createCellStyle();
+            identifier.cloneStyleFrom(template ? editable : text);
+            identifier.setDataFormat(book.createDataFormat().getFormat("@"));
+            ledger.setDefaultColumnStyle(HEADERS.size() - 1, identifier);
             CellStyle wrap = book.createCellStyle();
             wrap.cloneStyleFrom(text);
             wrap.setWrapText(true);
             put(ledger, 0, 0, template ? "경비 지출장부 · 입력 양식" : "경비 지출장부", title);
-            ledger.addMergedRegion(new CellRangeAddress(0, 0, 0, 14));
+            ledger.addMergedRegion(new CellRangeAddress(0, 0, 0, HEADERS.size() - 1));
             ledger.getRow(0).setHeightInPoints(34);
             put(
                     ledger,
@@ -55,22 +60,23 @@ public class ExcelExporter {
                                     ? "파란 글씨 칸에 입력 · 미확인 세액은 빈칸 · 세액 합계는 입력값만 합산"
                                     : "확정 건 · 조회 조건과 정렬 적용 · 미확인 세액은 빈칸 · 세액 합계는 입력값만 합산"),
                     text);
-            ledger.addMergedRegion(new CellRangeAddress(1, 1, 0, 14));
+            ledger.addMergedRegion(new CellRangeAddress(1, 1, 0, HEADERS.size() - 1));
             for (int c = 0; c < HEADERS.size(); c++) put(ledger, 3, c, HEADERS.get(c), header);
             // POI 행 번호는 0부터, 수식의 엑셀 행 번호는 1부터 시작하므로 데이터 첫 행은 각각 4와 5입니다.
             int count = template ? 200 : Math.max(1, expenses.size()), lastExcel = count + 4;
             for (int i = 0; i < count; i++) {
                 int r = i + 4;
-                for (int c = 0; c < 15; c++) put(ledger, r, c, "", template ? editable : text);
+                for (int c = 0; c < HEADERS.size(); c++) put(ledger, r, c, "", template ? editable : text);
                 ledger.getRow(r).setHeightInPoints(30);
                 for (int c : new int[] {5, 6, 7}) ledger.getRow(r).getCell(c).setCellStyle(money);
                 ledger.getRow(r).getCell(1).setCellStyle(date);
                 ledger.getRow(r).getCell(4).setCellStyle(wrap);
                 ledger.getRow(r).getCell(11).setCellStyle(wrap);
+                ledger.getRow(r).getCell(HEADERS.size() - 1).setCellStyle(identifier);
                 if (i < expenses.size()) {
                     Expense e = expenses.get(i);
                     var values = values(e);
-                    for (int c = 0; c < 15; c++) {
+                    for (int c = 0; c < HEADERS.size(); c++) {
                         var cell = ledger.getRow(r).getCell(c);
                         Object v = values.get(c);
                         if (c == 1 && e.receiptDate() != null)
@@ -94,9 +100,9 @@ public class ExcelExporter {
                                 + lastExcel
                                 + ")");
             }
-            ledger.setAutoFilter(new CellRangeAddress(3, count + 3, 0, 14));
+            ledger.setAutoFilter(new CellRangeAddress(3, count + 3, 0, HEADERS.size() - 1));
             ledger.createFreezePane(4, 4);
-            int[] widths = {10, 14, 24, 16, 34, 19, 19, 17, 15, 14, 16, 40, 14, 18, 32};
+            int[] widths = {10, 14, 24, 16, 34, 19, 19, 17, 15, 14, 16, 40, 14, 18, 32, 24};
             for (int c = 0; c < widths.length; c++) ledger.setColumnWidth(c, widths[c] * 256);
             // 빈 양식을 엑셀에서 직접 입력할 때도 앱과 같은 계정과목·결제수단 목록을 사용합니다.
             var validation = ledger.getDataValidationHelper();
@@ -189,7 +195,7 @@ public class ExcelExporter {
         }
     }
 
-    /** 엑셀과 구글 전송이 공유하는 15개 열의 순서입니다. 누락된 값은 이후 출력 단계에서 빈칸으로 바꿉니다. */
+    /** 엑셀과 구글 전송이 공유하는 열의 순서입니다. 누락된 값은 이후 출력 단계에서 빈칸으로 바꿉니다. */
     public static List<Object> values(Expense e) {
         return Arrays.asList(
                 e.id(),
@@ -206,7 +212,8 @@ public class ExcelExporter {
                 e.note(),
                 e.status().equals("CONFIRMED") ? "확정" : "검토 대기",
                 e.analysisSource(),
-                e.imagePath() == null ? "" : e.originalName());
+                e.imagePath() == null ? "" : e.originalName(),
+                e.approvalNumber());
     }
 
     /** 내보낸 문서에서 사용할 한글 글꼴·크기·색상을 생성합니다. */

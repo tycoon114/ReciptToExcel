@@ -76,9 +76,10 @@ class ReceiptAnalyzerTest {
         assertEquals("미분류", ReceiptAnalyzer.classify("내용 불명"));
     }
 
-    @Test
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"\"00001234\"", "1234", "null"})
     // 사진과 JSON 응답 요청을 보내는지, AI가 반환한 문자열 세액을 숫자로 강제하지 않는지 확인합니다.
-    void localAiUsesVisionPayloadAndRejectsInventedStringAmounts(@TempDir Path temp)
+    void localAiUsesVisionPayloadAndRejectsInventedStringAmounts(String approvalJson, @TempDir Path temp)
             throws Exception {
         var mapper = JsonMapper.builder().build();
         var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -93,7 +94,7 @@ class ReceiptAnalyzerTest {
                             mapper.writeValueAsBytes(
                                     Map.of(
                                             "response",
-                                            "{\"date\":\"2026-10-19\",\"vendor\":\"테스트식당\",\"category\":\"복리후생비\",\"amount\":9000,\"vatAmount\":\"818\",\"paymentMethod\":\"카드\"}"));
+                                            "{\"date\":\"2026-10-19\",\"vendor\":\"테스트식당\",\"category\":\"복리후생비\",\"amount\":9000,\"vatAmount\":\"818\",\"paymentMethod\":\"카드\",\"approvalNumber\":"+approvalJson+"}"));
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
                     exchange.sendResponseHeaders(200, response.length);
                     exchange.getResponseBody().write(response);
@@ -114,6 +115,7 @@ class ReceiptAnalyzerTest {
             assertEquals("OLLAMA", a.source());
             assertEquals(9000L, a.amount());
             assertNull(a.vat());
+            assertEquals("\"00001234\"".equals(approvalJson)?"00001234":"",a.approvalNumber());
         } finally {
             server.stop(0);
         }

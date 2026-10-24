@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS expenses (
  created_at VARCHAR(40) NOT NULL, version INT NOT NULL DEFAULT 0
 );
 
+-- 기존 장부도 다시 만들지 않고 선택 항목을 보완합니다. 과거 내역의 승인번호는 빈칸으로 남깁니다.
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approval_number VARCHAR(40) NOT NULL DEFAULT '';
+
 -- 영수증 지출 전표입니다. 영수증을 확정하는 것과 실제 기장하는 것을 별도로 관리합니다.
 -- 전표의 상호·날짜·계정·금액은 기장 당시의 사본이며, 취소해도 삭제하지 않습니다.
 CREATE TABLE IF NOT EXISTS bookkeeping_entries (
@@ -46,3 +49,5 @@ CREATE INDEX IF NOT EXISTS idx_bookkeeping_date ON bookkeeping_entries(entry_dat
 CREATE INDEX IF NOT EXISTS idx_bookkeeping_expense ON bookkeeping_entries(expense_id);
 -- 이미 추가 기능을 시험한 DB에도 증빙 사본 연결 열을 안전하게 보완합니다.
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS image_path VARCHAR(100);
+-- 승인번호는 기장 시 사본으로 남겨, 취소 후 원본을 수정해도 당시 값을 보존합니다.
+ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS approval_number VARCHAR(40) NOT NULL DEFAULT '';

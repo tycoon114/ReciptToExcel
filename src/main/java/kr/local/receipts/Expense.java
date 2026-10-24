@@ -24,6 +24,7 @@ package kr.local.receipts;
  * @param originalName 업로드 당시 파일명 또는 수동 입력 식별용 이름
  * @param createdAt 등록 시각이며 영수증 거래일과 구분
  * @param version 동시 수정 방지용 버전으로 저장·회전·재분석 때 증가
+ * @param approvalNumber 선택 입력 승인번호이며 앞자리 0을 보존하는 문자열
  */
 public record Expense(
         Long id,
@@ -46,4 +47,5 @@ public record Expense(
         String imageHash,
         String originalName,
         String createdAt,
-        int version) {}
+        int version,
+        String approvalNumber) {}

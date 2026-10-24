@@ -47,7 +47,7 @@ public class BookkeepingService {
             String entryDate, String receiptDate, String vendor, String memo, String debitAccount,
             String creditAccount, long totalAmount, long expenseAmount, long vatAmount, String taxMode,
             String postedBy, String postedAt, String status, String cancelledBy, String cancelledAt,
-            String cancelReason) {
+            String cancelReason, String approvalNumber) {
         public List<Line> lines() {
             List<Line> result = new ArrayList<>();
             if (expenseAmount > 0) result.add(new Line("차변", debitAccount, expenseAmount));
@@ -72,9 +72,9 @@ public class BookkeepingService {
                         r.getString("credit_account"), r.getLong("total_amount"), r.getLong("expense_amount"),
                         r.getLong("vat_amount"), r.getString("tax_mode"), r.getString("posted_by"),
                         r.getString("posted_at"), r.getString("status"), r.getString("cancelled_by"),
-                        r.getString("cancelled_at"), r.getString("cancel_reason"))).stream()
+                        r.getString("cancelled_at"), r.getString("cancel_reason"), r.getString("approval_number"))).stream()
                 .filter(e -> month == null || month.isBlank() || e.entryDate().startsWith(month))
-                .filter(e -> (e.entryNumber()+" "+e.vendor()+" "+e.memo()+" "+e.debitAccount()+" "+e.creditAccount())
+                .filter(e -> (e.entryNumber()+" "+e.vendor()+" "+e.memo()+" "+e.debitAccount()+" "+e.creditAccount()+" "+e.approvalNumber())
                         .toLowerCase(Locale.ROOT).contains(search)).toList();
     }
 
@@ -124,11 +124,11 @@ public class BookkeepingService {
         long selectedVat = vat;
         db.update(connection -> {
             var statement = connection.prepareStatement("INSERT INTO bookkeeping_entries "
-                    + "(entry_number,expense_id,active_expense_id,expense_version,image_path,entry_date,receipt_date,vendor,memo,debit_account,credit_account,total_amount,expense_amount,vat_amount,tax_mode,posted_by,posted_at) "
-                    + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", new String[]{"id"});
+                    + "(entry_number,expense_id,active_expense_id,expense_version,image_path,entry_date,receipt_date,vendor,memo,debit_account,credit_account,total_amount,expense_amount,vat_amount,tax_mode,posted_by,posted_at,approval_number) "
+                    + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", new String[]{"id"});
             Object[] values = {temporaryNumber, expenseId, expenseId, source.version(), source.imagePath(), date, source.receiptDate(),
                     source.vendor(), input.memo().trim(), source.category(), input.creditAccount(), source.amount(),
-                    expense, selectedVat, input.taxMode(), input.postedBy().trim(), Instant.now().toString()};
+                    expense, selectedVat, input.taxMode(), input.postedBy().trim(), Instant.now().toString(), source.approvalNumber()};
             for (int i=0; i<values.length; i++) statement.setObject(i+1, values[i]);
             return statement;
         }, key);

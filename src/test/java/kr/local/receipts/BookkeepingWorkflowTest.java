@@ -52,6 +52,7 @@ class BookkeepingWorkflowTest {
         input.put("category","복리후생비");input.put("description","직원 점심");input.put("amount",22000L);
         input.put("supplyAmount",20000L);input.put("vatAmount",2000L);input.put("paymentMethod","법인카드");
         input.put("ownerName","담당자");input.put("department","개발팀");input.put("note","");
+        input.put("approvalNumber","00001234");
         input.put("status","CONFIRMED");input.put("version",version);return input;
     }
     JsonNode receipt(boolean knownTax)throws Exception {
@@ -133,11 +134,14 @@ class BookkeepingWorkflowTest {
         assertFalse(cancelled.path("entry").path("cancelledAt").isNull());
         assertEquals(409,call("DELETE","/api/expenses/"+id,null).statusCode());
         var input=edit(cancelled.path("expense"),3);input.put("amount",44000);input.put("supplyAmount",40000);input.put("vatAmount",4000);
+        input.put("approvalNumber","00005678");
         var saved=call("PUT","/api/expenses/"+id,input);ok(saved);var second=post(tree(saved),"SPLIT_VAT");
         assertNotEquals(first.path("entry").path("entryNumber").asText(),second.path("entry").path("entryNumber").asText());
         var history=bookkeeping.list("","").stream().filter(e->e.expenseId()==id).toList();assertEquals(2,history.size());
         assertEquals(22000,history.stream().filter(e->e.status().equals("CANCELLED")).findFirst().orElseThrow().totalAmount());
         assertEquals(44000,history.stream().filter(e->e.status().equals("POSTED")).findFirst().orElseThrow().totalAmount());
+        assertEquals("00001234",history.stream().filter(e->e.status().equals("CANCELLED")).findFirst().orElseThrow().approvalNumber());
+        assertEquals("00005678",history.stream().filter(e->e.status().equals("POSTED")).findFirst().orElseThrow().approvalNumber());
         assertEquals(409,call("POST",cancelPath,Map.of("version",5,"cancelledBy","담당자","reason","이전 전표 재취소")).statusCode());
     }
 
@@ -186,6 +190,8 @@ class BookkeepingWorkflowTest {
             assertTrue(journal.getRow(4).getCell(5).getStringCellValue().startsWith("=HYPERLINK"));
             assertEquals(22000,book.getSheet("기장취소이력").getRow(4).getCell(5).getNumericCellValue());
             assertEquals("=1+1",book.getSheet("기장취소이력").getRow(4).getCell(9).getStringCellValue());
+            assertEquals("00001234",journal.getRow(4).getCell(11).getStringCellValue());
+            assertEquals("00001234",book.getSheet("기장취소이력").getRow(4).getCell(10).getStringCellValue());
         }
         var october=tree(call("GET","/api/bookkeeping/entries?month=2026-10&query="+query,null));assertEquals(1,october.size());
         assertEquals("CANCELLED",october.get(0).path("status").asText());

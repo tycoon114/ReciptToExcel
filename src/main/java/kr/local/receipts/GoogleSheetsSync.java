@@ -70,7 +70,7 @@ public class GoogleSheetsSync {
                                     Map.of(
                                             "addSheet",
                                             Map.of("properties", Map.of("title", TAB))))));
-        String range = URLEncoder.encode("'" + TAB + "'!A:O", StandardCharsets.UTF_8);
+        String range = URLEncoder.encode("'" + TAB + "'!A:P", StandardCharsets.UTF_8);
         var old = request("GET", root + "/values/" + range, token, null).path("values");
         // 같은 전용 이름의 탭이라도 첫 머리글이 다르면 다른 데이터일 수 있으므로 덮어쓰지 않습니다.
         if (!old.isMissingNode()
@@ -86,8 +86,8 @@ public class GoogleSheetsSync {
                     ExcelExporter.values(e).stream()
                             .map(v -> v == null ? (Object) "" : v)
                             .toList());
-        while (values.size() < rows) values.add(new ArrayList<>(Collections.nCopies(15, "")));
-        String target = URLEncoder.encode("'" + TAB + "'!A1:O" + rows, StandardCharsets.UTF_8);
+        while (values.size() < rows) values.add(new ArrayList<>(Collections.nCopies(ExcelExporter.HEADERS.size(), "")));
+        String target = URLEncoder.encode("'" + TAB + "'!A1:P" + rows, StandardCharsets.UTF_8);
         // RAW 입력을 사용하여 상호·메모가 수식처럼 보여도 스프레드시트 수식으로 해석하지 않게 합니다.
         request(
                 "PUT",
@@ -95,7 +95,7 @@ public class GoogleSheetsSync {
                 token,
                 Map.of(
                         "range",
-                        "'" + TAB + "'!A1:O" + rows,
+                        "'" + TAB + "'!A1:P" + rows,
                         "majorDimension",
                         "ROWS",
                         "values",

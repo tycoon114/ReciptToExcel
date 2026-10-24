@@ -53,6 +53,13 @@ class ReceiptWorkflowTest {
 
     final HttpClient http = HttpClient.newHttpClient();
 
+    @Test
+    // 일반 개발 실행은 관리 API를 노출하지 않고, 없는 아이콘 등은 실제 서버 장애와 구분합니다.
+    void missingResourcesAndDisabledDesktopRoutesReturnNotFound() throws Exception {
+        assertEquals(404,call("GET","/favicon.ico",null,null,false).statusCode());
+        assertEquals(404,call("GET","/api/desktop/status",null,null,false).statusCode());
+    }
+
     // 테스트 HTTP 요청을 만들며 출처와 전용 헤더를 조절하여 정상 요청과 차단 요청을 재현합니다.
     HttpResponse<byte[]> call(
             String method, String path, Object body, String origin, boolean header)
@@ -86,9 +93,13 @@ class ReceiptWorkflowTest {
         x.put("category", "복리후생비");
         x.put("description", "직원 점심");
         x.put("amount", 22000);
+        x.put("approvalNumber", "0".repeat(41));
+        assertEquals(400, call("PUT", "/api/expenses/" + id, x, null, true).statusCode());
+        x.put("approvalNumber", "00001234");
         x.put("supplyAmount", 20000);
         x.put("vatAmount", 2000);
         x.put("paymentMethod", "법인카드");
+        x.put("approvalNumber", "00001234");
         x.put("ownerName", "테스트");
         x.put("department", "개발");
         x.put("note", "=HYPERLINK(\"https://example.com\",\"test\")");
@@ -114,6 +125,7 @@ class ReceiptWorkflowTest {
                                 false));
         assertEquals(1, list.size());
         assertEquals(22000, list.get(0).path("amount").asInt());
+        assertEquals("00001234", list.get(0).path("approvalNumber").asText());
         assertEquals(0, tree(call("GET", "/api/expenses?month=2026-09", null, null, false)).size());
         var export = call("GET", "/api/export.xlsx", null, null, false);
         assertEquals(200, export.statusCode());
@@ -133,9 +145,13 @@ class ReceiptWorkflowTest {
                             .getNumericCellValue());
             assertNotNull(ledger.getPaneInformation());
             assertFalse(ledger.getDataValidations().isEmpty());
+            assertEquals("승인번호",ledger.getRow(3).getCell(15).getStringCellValue());
+            assertEquals("00001234",ledger.getRow(4).getCell(15).getStringCellValue());
+            assertEquals("@",ledger.getRow(4).getCell(15).getCellStyle().getDataFormatString());
         }
         x.put("version", 1);
         x.put("status", "REVIEW");
+        x.put("approvalNumber", "");
         assertEquals(200, call("PUT", "/api/expenses/" + id, x, null, true).statusCode());
         try (var book =
                 new XSSFWorkbook(
@@ -186,6 +202,29 @@ class ReceiptWorkflowTest {
                 Files.exists(
                         data.resolve("images")
                                 .resolve(tree(first).path("expense").path("imagePath").asText())));
+    }
+
+    @Test
+    // 사진 등록·중복·회전·재인식·선택값 삭제까지 승인번호가 문자열로 전달되는지 확인합니다.
+    void approvalNumberSurvivesStorageAndRotationAndCanBeCleared() throws Exception {
+        when(ocr.read(any())).thenReturn(new WindowsOcr.Result("예시식당\n합계 9000\n승인번호 00001234", ""));
+        var image=new BufferedImage(43,67,BufferedImage.TYPE_INT_RGB);
+        var bytes=new ByteArrayOutputStream();ImageIO.write(image,"png",bytes);
+        var uploaded=tree(upload(bytes.toByteArray())).path("expense");long id=uploaded.path("id").asLong();
+        try {
+            assertEquals("00001234",uploaded.path("approvalNumber").asText());
+            var duplicate=tree(upload(bytes.toByteArray()));assertTrue(duplicate.path("duplicate").asBoolean());
+            assertEquals("00001234",duplicate.path("expense").path("approvalNumber").asText());
+            var rotated=call("POST","/api/expenses/"+id+"/rotate",Map.of("version",0,"quarterTurns",1),null,true);
+            assertEquals(200,rotated.statusCode());assertEquals("00001234",tree(rotated).path("approvalNumber").asText());
+            when(ocr.read(any())).thenReturn(new WindowsOcr.Result("예시식당\n합계 9000\n승인번호 00005678", ""));
+            var reread=call("POST","/api/expenses/"+id+"/reanalyze",Map.of("version",1,"hint","직원 식사"),null,true);
+            assertEquals(200,reread.statusCode());assertEquals("00005678",tree(reread).path("approvalNumber").asText());
+            var input=new ExpenseInput("2026-10-23","예시식당","복리후생비","직원 식사",9000L,null,null,
+                    "카드","","","","CONFIRMED",2,null);
+            var cleared=call("PUT","/api/expenses/"+id,input,null,true);assertEquals(200,cleared.statusCode());
+            assertEquals("",tree(cleared).path("approvalNumber").asText());
+        } finally { call("DELETE","/api/expenses/"+id,null,null,true); }
     }
 
     @Test
@@ -263,7 +302,7 @@ class ReceiptWorkflowTest {
                         "부서",
                         "보존할 메모",
                         "CONFIRMED",
-                        0);
+                        0, "");
         assertEquals(200, call("PUT", "/api/expenses/" + id, edit, null, true).statusCode());
         when(ocr.read(any()))
                 .thenReturn(
@@ -312,7 +351,7 @@ class ReceiptWorkflowTest {
         long id = uploaded.path("id").asLong();
         // 이전 지점명 오분류가 기본 적요와 함께 저장된 검토 내역을 재현합니다.
         var legacy = new ExpenseInput("2026-10-17", "수서점", "도서인쇄비", "도서 구입",
-                11100L, null, null, "카드", "직원", "개발부", "도서 구입", "REVIEW", 0);
+                11100L, null, null, "카드", "직원", "개발부", "도서 구입", "REVIEW", 0, "");
         assertEquals(200, call("PUT", "/api/expenses/" + id, legacy, null, true).statusCode());
         var response = call("POST", "/api/expenses/" + id + "/reanalyze",
                 Map.of("version", 1, "hint", "도서 구입"), null, true);

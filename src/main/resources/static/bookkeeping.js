@@ -22,7 +22,7 @@ const BookkeepingUI = (() => {
   function renderJournal() {
     const month=el("book-month").value, query=el("book-query").value.trim().toLowerCase();
     const matching=entries.filter(e=>(!month || e.entryDate.startsWith(month))
-      && `${e.entryNumber} ${e.vendor} ${e.memo} ${e.debitAccount} ${e.creditAccount}`.toLowerCase().includes(query));
+      && `${e.entryNumber} ${e.vendor} ${e.memo} ${e.debitAccount} ${e.creditAccount} ${e.approvalNumber || ""}`.toLowerCase().includes(query));
     const active=matching.filter(e=>e.status==="POSTED");
     el("book-posted-count").textContent=active.length+"건";
     el("book-posted-amount").textContent=money(active.reduce((sum,e)=>sum+e.totalAmount,0))+"원";
@@ -33,6 +33,7 @@ const BookkeepingUI = (() => {
       const row=document.createElement("tr"), number=td(entry.entryDate), small=document.createElement("small");
       small.textContent=entry.entryNumber;number.append(small);
       const vendor=td(entry.vendor), memo=document.createElement("small");memo.textContent=entry.memo;vendor.append(memo);vendor.title=entry.memo;
+      if(entry.approvalNumber){const approval=document.createElement("small");approval.textContent="승인번호 "+entry.approvalNumber;vendor.append(approval);}
       const state=td(entry.status==="POSTED"?"기장 완료":"기장 취소");
       if(entry.status==="CANCELLED"){
         row.classList.add("book-cancelled-row");const reason=document.createElement("small");

@@ -16,6 +16,12 @@ import java.util.Map;
 public class ApiErrors {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ApiErrors.class);
 
+    /** 브라우저의 없는 아이콘 요청이나 비활성 관리 API 경로를 서버 장애로 기록하지 않습니다. */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<?> missingResource() {
+        return ResponseEntity.status(404).body(Map.of("message", "요청한 경로를 찾을 수 없습니다."));
+    }
+
     /** 서비스가 의도적으로 만든 오류 상태와 안내 문구를 그대로 전달합니다. */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<?> known(ResponseStatusException e) {
