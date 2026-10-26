@@ -1,10 +1,12 @@
-# ReceiptToExcel 0.3.0 · Java 설치 없는 Windows 실행 안내
+# ReceiptToExcel 0.3.1 · Java 설치 없는 Windows 실행 안내
+
+0.2.0 이후의 PDF 등록·인식 보완·자동 검증 변경 사항은 배포판과 프로젝트의 `docs/RELEASE_NOTES.md`에 정리되어 있습니다.
 
 ## 사용자가 실행하는 방법
 
 지원 대상은 Windows 10/11 **x64 PC**입니다. 이 ZIP에는 전용 Java 실행 환경이 포함되어 있으므로 Java 설치, JAVA_HOME 설정, IntelliJ, Maven이 필요하지 않습니다.
 
-1. GitHub 릴리스의 Assets에서 **ReceiptToExcel-0.3.0-windows-x64.zip**을 받습니다.
+1. GitHub 릴리스의 Assets에서 **ReceiptToExcel-0.3.1-windows-x64.zip**을 받습니다.
 2. 문서 폴더 등 쓰기 가능한 위치에 **압축을 모두 풉니다**. ZIP 안에서 바로 실행하지 않습니다.
 3. 폴더 안의 **ReceiptToExcel.exe**를 더블 클릭합니다. 관리자 권한은 필요하지 않습니다.
 4. 작은 **영수증 장부 · 실행 관리** 창이 나타나고 준비가 끝나면 기본 브라우저로 장부가 열립니다.
@@ -51,9 +53,9 @@ Java는 설치할 필요가 없습니다. 기본 문자 인식은 **Windows 내�
 
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-release.ps1
 
-3. 결과물 target/ReceiptToExcel-0.3.0-windows-x64.zip과 .zip.sha256을 확인합니다.
+3. 결과물 target/ReceiptToExcel-0.3.1-windows-x64.zip과 .zip.sha256을 확인합니다.
 4. GitHub 웹사이트에서 Releases → Draft a new release를 엽니다.
-5. 태그 v0.3.0과 이번 코드를 Push한 브랜치를 선택하고 제목·변경 내용을 작성합니다.
+5. 태그 v0.3.1과 이번 코드를 Push한 브랜치를 선택하고 제목·변경 내용을 작성합니다.
 6. 실행용 ZIP과 SHA256 파일을 Assets에 첨부합니다. 첫 고객 검증 배포라면 pre-release로 등록합니다.
 7. Publish release 후 고객에게 릴리스 페이지 주소를 전달합니다.
 
