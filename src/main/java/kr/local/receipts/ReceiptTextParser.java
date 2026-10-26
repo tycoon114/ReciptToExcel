@@ -52,6 +52,12 @@ final class ReceiptTextParser {
         Total total = total(text);
         var approval = ApprovalNumberParser.parse(text);
         Long supply = tax(text, SUPPLY), vat = tax(text, VAT);
+        // 기울어진 스캔에서 세액 표기와 옆 행의 총액이 잘못 붙을 수 있습니다. 합계와 모순된 세액은 계산해 채우지 않습니다.
+        boolean inconsistentTax = total.amount() != null
+                && (supply != null && supply > total.amount()
+                        || vat != null && vat > 0 && vat >= total.amount()
+                        || supply != null && vat != null && supply + vat != total.amount());
+        if (inconsistentTax) { supply = null; vat = null; }
         String category = ReceiptAnalyzer.classify(text + " " + hint);
         String compact = text.replaceAll("\\s", "");
         String payment = compact.contains("카드") ? "카드" : compact.contains("현금") ? "현금" : "미확인";
@@ -67,7 +73,8 @@ final class ReceiptTextParser {
                 payment,
                 description,
                 "OCR_RULES",
-                "규칙 기반 제안입니다. 업무 목적을 확인해 주세요. " + total.warning() + " " + approval.warning(),
+                "규칙 기반 제안입니다. 업무 목적을 확인해 주세요. " + total.warning() + " " + approval.warning()
+                        + (inconsistentTax ? " 공급가액·부가세가 총액과 맞지 않아 세액을 비웠습니다. 원본을 확인해 주세요." : ""),
                 text,
                 approval.value());
     }
@@ -271,7 +278,7 @@ final class ReceiptTextParser {
             if (!plausible(cleaned)) continue;
             if (cleaned.matches(".*[가-힣].*\\d$")) continue;
             if (cleaned.matches("[가-힣A-Za-z0-9]{1,12}점")
-                    && !cleaned.matches(".*(?:문고|식당|카페)")
+                    && !cleaned.matches(".*(?:문고|식당|카페|상점|음식점|편의점|매점|대리점|판매점)")
                     && (!cleaned.endsWith("서점") || !best.isBlank())) {
                 if (branch.isBlank()) branch = cleaned;
                 continue;
@@ -292,6 +299,12 @@ final class ReceiptTextParser {
 
     /** 상호 뒤의 대표자·사업자·전화 정보와 장식 문자를 잘라 거래처 이름 후보를 정리합니다. */
     private static String cleanMerchant(String text) {
+        // 상호 / 사업자번호 / 대표자 형식에서는 번호 앞까지만 상호로 사용합니다. 상호 없이 번호부터 시작하면 빈칸입니다.
+        text = text.split("(?<![0-9])[0-9]{3}[\\h-]+[0-9]{2}[\\h-]+[0-9]{5}(?![0-9])", 2)[0]
+                .replaceFirst("[\\h/|]+$", "");
+        // 큰 영문 브랜드 옆 QR 코드가 한자·기호로 붙은 경우, 읽힌 영문 브랜드 부분을 보존합니다.
+        var brand = Pattern.compile("^([A-Z][A-Z &'-]{4,})\\h+.*[\\p{IsHan}].*$").matcher(text);
+        if (brand.matches()) text = brand.group(1);
         return ReceiptAnalyzer.cut(
                 text.split("(?i)(?:대표(?:이사)?\\h*[:：•]|사업자|\\bTEL\\b|NO[:：]|\\(?0\\d{1,2}\\)?[\\h.·•-]*\\d{3,4}[\\h.·•-]\\d{4})", 2)[0]
                         .replaceAll("^[\\h\\[\\]★☆*•:：]+|[\\h★☆*]+$", "")
@@ -305,6 +318,7 @@ final class ReceiptTextParser {
     private static boolean plausible(String name) {
         if (name.length() < 2
                 || name.length() > 80
+                || name.replaceAll("\\h", "").matches("(?:매장|상호|상호명|상품명|품명|단가|수량)[:：]?")
                 || name.replaceAll("\\s", "")
                         .matches(
                                 ".*(?:주소|전화|사업자|등록번호|매출일|거래일|카운터|출력|영수증|교환|환불|대표|고객용|KSNET|KSnET|승인|포상금|국세|정부|공급가액|부가세|합계|단가|수량|금액|고객센터|주문|결제|판매시간|테이블|설문|담당자|일시불|매입사|https?).*"))

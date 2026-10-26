@@ -13,7 +13,9 @@ import static org.mockito.Mockito.*;
 class ApprovalNumberParserTest {
     @ParameterizedTest
     @ValueSource(strings={"승인번호 : 00001234", "승 인 번 호：００００１２３４", "승인No. 00001234",
-            "승인번호\n00001234", "AUTH CODE: 00001234", "Approval No. 00001234", "승인: 00001234"})
+            "승인번호\n00001234", "AUTH CODE: 00001234", "Approval No. 00001234", "승인: 00001234",
+            "[승인번호] 00001234", "[승 인 번 호」 00001234", "승인번호】\n00001234", "승인번호•00001234",
+            "[AUTH CODE] 00001234", "승인번호 : 00001234]"})
     void explicitLabelsPreserveLeadingZeros(String text) {
         assertEquals("00001234",ReceiptTextParser.parse("예시식당\n합계: 9,000\n"+text, "").approvalNumber());
         assertEquals(9000L,ReceiptTextParser.parse("예시식당\n합계: 9,000\n"+text, "").amount());
@@ -22,7 +24,8 @@ class ApprovalNumberParserTest {
     @ParameterizedTest
     @ValueSource(strings={"합계 9000\n카드번호 12345678\n거래번호 98765432", "승인금액 9000", "승인일시 2026-10-23",
             "승인번호 ****1234", "승인번호 01234567\n승인번호 07654321", "승인번호\n거래번호 01234567",
-            "승인번호 01234567 07654321", "승인번호 2026-10-23", "승인번호 01234567****"})
+            "승인번호 01234567 07654321", "승인번호 2026-10-23", "승인번호 01234567****",
+            "[승인번호 1 01234567", "[승인번호] ****1234"})
     void absentMaskedAndConflictingNumbersStayBlank(String text) {
         assertEquals("",ReceiptTextParser.parse(text, "").approvalNumber());
     }
@@ -31,6 +34,14 @@ class ApprovalNumberParserTest {
         assertEquals("00AB1234",ApprovalNumberParser.parse("승인번호 00AB1234").value());
         assertEquals("00001234",ApprovalNumberParser.parse("승인번호 00001234\n승인번호 00001234").value());
         assertFalse(ApprovalNumberParser.parse("승인번호 01234567\n승인번호 07654321").warning().isBlank());
+    }
+
+    @Test void incompleteLabelsTriggerAnotherReadButDoNotAuthorizeGuessingANumber() {
+        for (String text : List.of("인 번 호• 00001234", "술 인 번 호:00001234")) {
+            assertEquals("", ApprovalNumberParser.parse(text).value());
+            assertTrue(ApprovalNumberParser.needsAnotherPass(text));
+        }
+        assertFalse(ApprovalNumberParser.needsAnotherPass("승인금액 11000"));
     }
 
     @Test void conflictingPreprocessedOcrCandidatesRequireManualConfirmation() {

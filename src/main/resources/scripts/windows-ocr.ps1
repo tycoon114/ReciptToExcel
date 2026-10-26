@@ -45,9 +45,12 @@ try {
         $rowBoxes = [System.Collections.Generic.List[object]]::new()
         # 같은 시각적 행의 단어를 가로 위치순으로 합치고, Java의 금액 부분 재인식에 필요한 세로 범위를 남깁니다.
         function Add-OcrRow($rowWords) {
-            $rowText = (($rowWords | Sort-Object Left | ForEach-Object { $_.Text }) -join ' ')
+            $ordered = @($rowWords | Sort-Object Left)
+            $rowText = (($ordered | ForEach-Object { $_.Text }) -join ' ')
             $rows.Add($rowText)
-            $rowBoxes.Add(@{text=$rowText; top=($rowWords | Measure-Object Top -Minimum).Minimum; bottom=($rowWords | Measure-Object Bottom -Maximum).Maximum})
+            # 승인번호를 다시 읽을 때 주변 카드번호·금액을 제외할 수 있도록 단어별 위치도 함께 전달합니다.
+            $rowBoxes.Add(@{text=$rowText; top=($rowWords | Measure-Object Top -Minimum).Minimum; bottom=($rowWords | Measure-Object Bottom -Maximum).Maximum;
+                words=@($ordered | ForEach-Object { @{text=$_.Text; left=$_.Left; right=$_.Right; top=$_.Top; bottom=$_.Bottom} })})
         }
         $group = [System.Collections.Generic.List[object]]::new()
         $center = 0.0

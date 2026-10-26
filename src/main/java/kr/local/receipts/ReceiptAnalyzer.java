@@ -182,6 +182,7 @@ public class ReceiptAnalyzer {
                     date = a.date();
                     break;
                 }
+        boolean vendorFromOtherPass = !vendor.equals(best.vendor());
         // OCR 방식별 총액 차이를 숨기지 않고 안내하여, 점수가 높은 후보도 원본 대조를 거치게 합니다.
         java.util.Set<Long> amounts = new java.util.LinkedHashSet<>();
         for (var a : candidates) if (a.amount() != null) amounts.add(a.amount());
@@ -200,7 +201,7 @@ public class ReceiptAnalyzer {
                 best.description().isBlank() && category.equals("도서인쇄비")
                         ? "도서 구입"
                         : best.description();
-        if (!vendor.equals(best.vendor())) message += " 사업자번호가 일치하는 로컬 거래처 사전을 적용했습니다.";
+        if (vendorFromOtherPass) message += " 다른 인식 후보 또는 로컬 거래처 사전으로 거래처를 보완했습니다.";
         return new Analysis(
                 date,
                 vendor,

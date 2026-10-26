@@ -16,8 +16,14 @@ import java.util.concurrent.TimeUnit;
 public class WindowsOcr {
     private final ObjectMapper json;
 
-    /** OCR 행의 원문과 원본 이미지상의 위·아래 좌표입니다. 숫자 영역을 잘라 읽을 때 사용합니다. */
-    public record Row(String text, double top, double bottom) {}
+    /** 단어의 원문과 사각형입니다. 다른 행의 카드번호·금액을 승인번호로 가져오지 않도록 사용합니다. */
+    public record Word(String text, double left, double top, double right, double bottom) {}
+
+    /** OCR 행과 단어 좌표입니다. 기존 행 좌표만 제공하는 호출도 유지합니다. */
+    public record Row(String text, double top, double bottom, java.util.List<Word> words) {
+        public Row { words = words == null ? java.util.List.of() : java.util.List.copyOf(words); }
+        public Row(String text, double top, double bottom) { this(text, top, bottom, java.util.List.of()); }
+    }
 
     /** 원문·안내·전처리 후보·행 위치를 담습니다. 후보 목록은 외부에서 바꾸지 못하도록 복사합니다. */
     public record Result(String text, String message, java.util.List<String> alternatives,
@@ -40,16 +46,18 @@ public class WindowsOcr {
 
     /** 기본 OCR와 숫자 행 복구를 수행하고, 필요한 경우에만 여러 크기·명암의 인식 결과를 비교합니다. */
     public Result read(Path image) {
-        Result original = recoverAmountRows(image, readNative(image));
+        Result original = recoverApprovalRows(image, recoverAmountRows(image, readNative(image)));
         // 핵심 정보가 이미 있는 일반 영수증은 바로 반환하여 반복 인식 비용을 줄입니다. 도서는 보정 후보를 더 비교합니다.
         var basic = ReceiptTextParser.parse(original.text(), "");
         if (original.text().isBlank()
                 || basic.amount() != null
                         && basic.date() != null
                         && !basic.vendor().isBlank()
+                        && !hasUnreadableApproval(original.text())
                         && !ReceiptTextParser.book(original.text())) return original;
         var candidates = new java.util.ArrayList<String>();
         candidates.add(original.text());
+        candidates.addAll(original.alternatives());
         var prep = new ReceiptOcrImages();
         for (int mode = 0; mode < 5; mode++) {
             Path temp = null;
@@ -78,7 +86,8 @@ public class WindowsOcr {
                                             var a = ReceiptTextParser.parse(t, "");
                                             return a.date() != null
                                                     && a.amount() != null
-                                                    && !a.vendor().isBlank();
+                                                    && !a.vendor().isBlank()
+                                                    && !hasUnreadableApproval(t);
                                         })) break;
             } catch (Exception ignored) {
                 /* 전처리에 실패해도 이미 확보한 원본 OCR 결과는 유지합니다. */
@@ -93,7 +102,96 @@ public class WindowsOcr {
         return new Result(
                 original.text(),
                 original.message() + " 크기 축소·영수증 영역·명암·문자 두께를 바꾼 인식 결과를 비교했습니다.",
-                java.util.List.copyOf(candidates.subList(1, candidates.size())));
+                java.util.List.copyOf(candidates.subList(1, candidates.size())), original.rows());
+    }
+
+    /** 승인번호가 선택 항목이라는 원칙은 유지하되, 표기가 있는데 못 읽은 경우에는 조기 종료하지 않습니다. */
+    private static boolean hasUnreadableApproval(String text) {
+        return text.lines().anyMatch(ApprovalNumberParser::needsAnotherPass);
+    }
+
+    /** 불확실한 승인번호의 단어 영역만 두 크기로 재인식합니다. 두 결과가 모두 같을 때만 해당 행을 보완합니다. */
+    private Result recoverApprovalRows(Path image, Result original) {
+        var targets = original.rows().stream().filter(row -> ApprovalNumberParser.needsRecovery(row.text()))
+                .limit(2).toList();
+        if (targets.isEmpty()) return original;
+        java.awt.image.BufferedImage source = null;
+        String[] lines = original.text().split("\\R", -1);
+        var alternatives = new java.util.ArrayList<>(original.alternatives());
+        boolean changed = false;
+        try {
+            source = javax.imageio.ImageIO.read(image.toFile());
+            if (source == null) return original;
+            for (var row : targets) {
+                int labelEnd = ApprovalNumberParser.labelEnd(row.text());
+                String tail = row.text().substring(labelEnd);
+                // 마스킹이나 다른 항목 표기가 섞이면 부분 인식으로 임의 복원하지 않습니다.
+                if (tail.matches(".*[*#].*") || tail.matches(".*[가-힣].*")) continue;
+                int offset = 0;
+                var words = new java.util.ArrayList<Word>();
+                for (var word : row.words()) {
+                    int position = row.text().indexOf(word.text(), offset);
+                    if (position < 0) continue;
+                    offset = position + word.text().length();
+                    if (position >= labelEnd && ApprovalNumberParser.valid(word.text())) words.add(word);
+                }
+                if (words.size() != 1) continue;
+                Word word = words.get(0);
+                // OCR 좌표는 정수 범위·원본 안쪽인지 검사하고, 글자 획이 잘리지 않도록 작은 여백을 둡니다.
+                if (!Double.isFinite(word.left()) || !Double.isFinite(word.right())
+                        || !Double.isFinite(word.top()) || !Double.isFinite(word.bottom())
+                        || word.left() < 0 || word.top() < 0 || word.right() > source.getWidth()
+                        || word.bottom() > source.getHeight() || word.right() <= word.left()
+                        || word.bottom() <= word.top()) continue;
+                int left = Math.max(0, (int)Math.floor(word.left()) - 4);
+                int top = Math.max(0, (int)Math.floor(word.top()) - 4);
+                int right = Math.min(source.getWidth(), (int)Math.ceil(word.right()) + 4);
+                int bottom = Math.min(source.getHeight(), (int)Math.ceil(word.bottom()) + 4);
+                var values = new java.util.ArrayList<String>();
+                for (double scale : new double[]{1, 1.5}) {
+                    Path crop = null;
+                    var prepared = new java.awt.image.BufferedImage((int)((right-left)*scale)+40,
+                            (int)((bottom-top)*scale)+40, java.awt.image.BufferedImage.TYPE_INT_RGB);
+                    try {
+                        var g = prepared.createGraphics();
+                        try {
+                            g.setColor(java.awt.Color.WHITE); g.fillRect(0, 0, prepared.getWidth(), prepared.getHeight());
+                            g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                                    java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                            g.drawImage(source, 20, 20, prepared.getWidth()-20, prepared.getHeight()-20,
+                                    left, top, right, bottom, null);
+                        } finally { g.dispose(); }
+                        crop = Files.createTempFile("receipt-ocr-approval-", ".png");
+                        javax.imageio.ImageIO.write(prepared, "png", crop.toFile());
+                        String value = readNative(crop).text().trim();
+                        if (ApprovalNumberParser.valid(value)) values.add(value);
+                    } finally {
+                        prepared.flush();
+                        if (crop != null) Files.deleteIfExists(crop);
+                    }
+                }
+                int index = original.rows().indexOf(row);
+                // 서로 다른 두 번호가 읽히면 두 근거를 모두 넘겨 최종 분석에서 충돌을 안내하고 번호를 비웁니다.
+                if (values.size() == 2 && !values.get(0).equals(values.get(1))
+                        && index < lines.length && lines[index].equals(row.text())) {
+                    for (String value : values) {
+                        String[] candidate = lines.clone();
+                        candidate[index] = row.text().substring(0, labelEnd) + " : " + value;
+                        alternatives.add(String.join("\n", candidate));
+                    }
+                }
+                if (values.size() == 2 && values.get(0).equals(values.get(1))
+                        && index < lines.length && lines[index].equals(row.text())) {
+                    lines[index] = row.text().substring(0, labelEnd) + " : " + values.get(0);
+                    changed = true;
+                }
+            }
+        } catch (Exception ignored) {
+            /* 부분 인식 실패 시 원본 결과와 수동 확인 안내를 유지합니다. */
+        } finally { if (source != null) source.flush(); }
+        return new Result(String.join("\n", lines), original.message()
+                + (changed ? " 승인번호 영역을 두 크기로 다시 읽어 일치하는 값을 보완했습니다." : ""),
+                alternatives, original.rows());
     }
 
     /** 총액이 누락된 합계·결제 행을 최대 네 개까지 재인식합니다. 행 위치를 유지해 같은 표기도 구분합니다. */
@@ -203,8 +301,13 @@ public class WindowsOcr {
             String text = result.path("text").asText("");
             String language = result.path("language").asText("");
             var rows = new java.util.ArrayList<Row>();
-            for (var row : result.path("rows"))
-                rows.add(new Row(row.path("text").asText(""), row.path("top").asDouble(), row.path("bottom").asDouble()));
+            for (var row : result.path("rows")) {
+                var words = new java.util.ArrayList<Word>();
+                for (var word : row.path("words")) words.add(new Word(word.path("text").asText(""),
+                        word.path("left").asDouble(), word.path("top").asDouble(),
+                        word.path("right").asDouble(), word.path("bottom").asDouble()));
+                rows.add(new Row(row.path("text").asText(""), row.path("top").asDouble(), row.path("bottom").asDouble(), words));
+            }
             return new Result(
                     text,
                     text.isBlank()
