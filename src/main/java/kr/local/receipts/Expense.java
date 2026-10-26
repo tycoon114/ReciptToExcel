@@ -25,6 +25,9 @@ package kr.local.receipts;
  * @param createdAt 등록 시각이며 영수증 거래일과 구분
  * @param version 동시 수정 방지용 버전으로 저장·회전·재분석 때 증가
  * @param approvalNumber 선택 입력 승인번호이며 앞자리 0을 보존하는 문자열
+ * @param pdfHash PDF 원본의 식별값이며 JPG·PNG·직접 입력은 null
+ * @param pdfPage PDF의 원래 페이지 번호이며 1부터 시작
+ * @param pdfPageCount 원본 PDF의 전체 페이지 수
  */
 public record Expense(
         Long id,
@@ -48,4 +51,7 @@ public record Expense(
         String originalName,
         String createdAt,
         int version,
-        String approvalNumber) {}
+        String approvalNumber,
+        String pdfHash,
+        Integer pdfPage,
+        Integer pdfPageCount) {}

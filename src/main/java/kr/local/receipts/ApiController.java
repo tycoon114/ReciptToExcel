@@ -76,6 +76,36 @@ public class ApiController {
         return service.upload(file, hint);
     }
 
+    /** PDF를 검사하고 원본을 준비합니다. 이 단계에서는 장부 내역이 생성되지 않습니다. */
+    @PostMapping(value="/receipts/pdf", consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public PdfDocuments.Document preparePdf(@RequestParam MultipartFile file) throws Exception {
+        return service.preparePdf(file);
+    }
+
+    public record PdfPageInput(@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max=500) String hint) {}
+
+    /** 페이지별 요청으로 진행 상황과 실패 페이지를 구분합니다. PDF 페이지 번호는 1부터 시작합니다. */
+    @PostMapping(value="/receipts/pdf/{hash}/pages/{page}", consumes=MediaType.APPLICATION_JSON_VALUE)
+    public ReceiptService.UploadResult pdfPage(@PathVariable String hash, @PathVariable int page,
+            @Valid @RequestBody PdfPageInput input) throws Exception {
+        return service.uploadPdfPage(hash,page,input.hint());
+    }
+
+    /** 모든 페이지가 실패한 경우에만 준비된 원본을 정리합니다. 성공한 영수증의 원본은 유지됩니다. */
+    @PostMapping("/receipts/pdf/{hash}/finish")
+    public Map<String,Boolean> finishPdf(@PathVariable String hash) throws Exception {
+        service.finishPdf(hash); return Map.of("finished",true);
+    }
+
+    /** 서버에서 PDF 스크립트를 실행하지 않으며, 원본 대조용 파일은 다운로드 응답으로 제공합니다. */
+    @GetMapping("/expenses/{id}/pdf")
+    public ResponseEntity<Resource> originalPdf(@PathVariable long id) {
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\"receipt-source.pdf\"")
+                .header(HttpHeaders.CACHE_CONTROL,"no-store")
+                .body(new FileSystemResource(service.originalPdf(id)));
+    }
+
     /** 영수증 사진 없이 직접 입력할 빈 검토 내역을 만듭니다. */
     @PostMapping("/expenses")
     public Expense manual() {

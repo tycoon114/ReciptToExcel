@@ -42,7 +42,10 @@ public class LedgerRepository {
                             r.getString("original_name"),
                             r.getString("created_at"),
                             r.getInt("version"),
-                            r.getString("approval_number"));
+                            r.getString("approval_number"),
+                            r.getString("pdf_hash"),
+                            r.getObject("pdf_page", Integer.class),
+                            r.getObject("pdf_page_count", Integer.class));
 
     public LedgerRepository(JdbcTemplate db) {
         this.db = db;
@@ -70,10 +73,16 @@ public class LedgerRepository {
 
     /** 분석 결과를 새 행으로 저장합니다. 검토 상태·버전·빈 사용자 정보는 스키마 기본값을 사용합니다. */
     public Expense insert(ReceiptAnalyzer.Analysis a, String imagePath, String hash, String name) {
+        return insert(a, imagePath, hash, name, null, null, null);
+    }
+
+    /** PDF 페이지의 출처는 수정 폼으로 바꾸지 않고 등록할 때만 연결합니다. */
+    public Expense insert(ReceiptAnalyzer.Analysis a, String imagePath, String hash, String name,
+            String pdfHash, Integer pdfPage, Integer pdfPageCount) {
         db.update(
                 "INSERT INTO"
-                    + " expenses(receipt_date,vendor,category,description,amount,supply_amount,vat_amount,payment_method,note,analysis_source,analysis_message,ocr_text,image_path,image_hash,original_name,created_at,approval_number)"
-                    + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    + " expenses(receipt_date,vendor,category,description,amount,supply_amount,vat_amount,payment_method,note,analysis_source,analysis_message,ocr_text,image_path,image_hash,original_name,created_at,approval_number,pdf_hash,pdf_page,pdf_page_count)"
+                    + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 a.date(),
                 a.vendor(),
                 a.category(),
@@ -90,7 +99,7 @@ public class LedgerRepository {
                 hash,
                 name,
                 Instant.now().toString(),
-                a.approvalNumber());
+                a.approvalNumber(), pdfHash, pdfPage, pdfPageCount);
         if (hash != null) return byHash(hash).orElseThrow();
         // 수동 입력은 고유한 임시 이름으로 조회하여 다른 요청의 마지막 삽입 ID와 섞이지 않게 합니다.
         return db.query("SELECT * FROM expenses WHERE original_name=?", MAPPER, name).get(0);

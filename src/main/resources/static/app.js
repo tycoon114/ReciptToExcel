@@ -40,6 +40,7 @@ function render() {
     const tr = document.createElement("tr");
     tr.append(cell(expense.receiptDate || "날짜 미확인"));
     const vendor = cell(expense.vendor || "거래처 미확인"); const description = document.createElement("small"); description.textContent = expense.description || "적요를 입력해 주세요"; vendor.append(description); tr.append(vendor);
+    if(expense.pdfHash){const source=document.createElement("small");source.textContent=`PDF · ${expense.pdfPage}/${expense.pdfPageCount}쪽`;source.title=expense.originalName;vendor.append(source);}
     const category = cell(""); const tag = document.createElement("span"); tag.className="category-tag"; tag.textContent=expense.category; category.append(tag); tr.append(category);
     const note = cell(expense.note || "—"); note.title=expense.note;
     const payment = cell(expense.paymentMethod), approval = document.createElement("small");
@@ -60,40 +61,48 @@ function openEditor(expense) {
   for(const field of fields) $("edit-"+field).value=expense[field]??"";
   $("receipt-preview").hidden=!expense.imagePath; $("original-link").hidden=!expense.imagePath; $("no-image").hidden=!!expense.imagePath;
   $("photo-tools").hidden=!expense.imagePath;
+  $("pdf-original-link").hidden=!expense.pdfHash;
+  if(expense.pdfHash){$("pdf-original-link").href=`/api/expenses/${expense.id}/pdf`;$("pdf-original-link").textContent=`원본 PDF 내려받기 · ${expense.pdfPage}/${expense.pdfPageCount}쪽`;}else $("pdf-original-link").removeAttribute("href");
   if(expense.imagePath) { $("receipt-preview").src=`/api/expenses/${expense.id}/image?v=${expense.version}`; $("original-link").href=`/api/expenses/${expense.id}/image?v=${expense.version}`; } else $("receipt-preview").removeAttribute("src");
   $("analysis-source").textContent=expense.analysisSource==="OLLAMA"?"로컬 AI 분석":expense.analysisSource==="OCR_RULES"?"기본 모드 · Windows OCR + 규칙 분류":"직접 입력";
   $("analysis-message").textContent=expense.analysisMessage; $("ocr-text").textContent=expense.ocrText||"인식된 원문이 없습니다."; $("edit-error").hidden=true;
   BookkeepingUI.open(expense);
   if(!$("editor").open) $("editor").showModal();
 }
-// 여러 사진은 순서대로 업로드합니다. 개별 실패가 있어도 나머지 사진을 계속 처리하고 결과를 합쳐 안내합니다.
+// 사진과 PDF를 순서대로 처리합니다. PDF는 한 페이지를 한 영수증으로 등록하고 페이지별 진행·실패를 표시합니다.
 async function upload(files) {
   if(uploading || !files.length) return;
   uploading=true; $("receipt-files").disabled=true;
-  const selected=Array.from(files); let saved=0, duplicate=0; const errors=[]; let latest;
+  const selected=Array.from(files); let saved=0, duplicate=0, units=0; const errors=[]; let latest;
+  const hint=$("upload-hint").value.trim();
+  const record=result=>{units++;if(result.duplicate)duplicate++;else{saved++;latest=result.expense;}};
   try {
     for(let i=0;i<selected.length;i++) {
-      const file=selected[i]; $("upload-label").textContent=`${i+1} / ${selected.length} · 인식 중…`;
-      notice(`사진을 인식하고 있습니다 (${i+1}/${selected.length}). `+(config.aiEnabled?"로컬 AI는 사진당 최대 약 3분이 걸릴 수 있습니다.":"잠시 기다려 주세요."));
-      if(file.size>10*1024*1024) { errors.push(file.name+": 10MB 초과"); continue; }
-      const data=new FormData(); data.append("file",file); data.append("hint",$("upload-hint").value.trim());
+      const file=selected[i], isPdf=file.type==="application/pdf" || /\.pdf$/i.test(file.name);
+      $("upload-label").textContent=`${i+1} / ${selected.length} · ${isPdf?"PDF 검사":"인식"} 중…`;
+      notice(`${file.name} · ${isPdf?"PDF 페이지를 확인":"사진을 인식"}하고 있습니다. `+(config.aiEnabled?"로컬 AI는 한 페이지당 최대 약 3분이 걸릴 수 있습니다.":"잠시 기다려 주세요."));
+      const limit=isPdf?25:10;
+      if(file.size>limit*1024*1024) { errors.push(`${file.name}: ${limit}MB 초과`); continue; }
+      const data=new FormData(); data.append("file",file); data.append("hint",hint);
       try {
-            const result=await api("/api/receipts",
-                {method:"POST",body:data});
-
-            if(result.duplicate){
-              duplicate++;
-
-              //중복된 사진 알리기
-              if(selected.length===1){
-                alert(`${file.name}\n이미 등록된 영수증입니다. 추가 등록하지 않았습니다.`);
-              }
-            }else{
-                saved++;
-
-                //신규 등록 영수증만 검토창 열기
-                latest = result.expense;
+        if(isPdf){
+          const document=await api("/api/receipts/pdf",{method:"POST",body:data});
+          try {
+            for(let page=1;page<=document.pageCount;page++){
+              $("upload-label").textContent=`PDF ${page} / ${document.pageCount}쪽 · 인식 중…`;
+              notice(`${file.name} · ${page}/${document.pageCount}쪽 처리 중입니다. 한 페이지를 영수증 한 건으로 등록합니다.`);
+              try {record(await api(`/api/receipts/pdf/${document.hash}/pages/${page}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({hint})}));}
+              catch(error){errors.push(`${file.name} · ${page}쪽: ${error.message}`);}
             }
+          } finally {
+            // 성공한 페이지가 있으면 원본은 보존합니다. 전부 실패했을 때만 연결 없는 PDF를 정리합니다.
+            try {await api(`/api/receipts/pdf/${document.hash}/finish`,{method:"POST"});}
+            catch(error){errors.push(`${file.name} · PDF 정리: ${error.message}`);}
+          }
+        }else{
+          const result=await api("/api/receipts",{method:"POST",body:data});record(result);
+          if(result.duplicate && selected.length===1)alert(`${file.name}\n이미 등록된 영수증입니다. 추가 등록하지 않았습니다.`);
+        }
       }
       catch(error) { errors.push(file.name+": "+error.message); }
     }
@@ -103,9 +112,9 @@ async function upload(files) {
         (errors.length ? "\n" + errors.join("\n") : ""),
         errors.length > 0
     );
-    if(selected.length===1 && latest) openEditor(latest);
+    if(selected.length===1 && units===1 && errors.length===0 && latest) openEditor(latest);
   } catch(error) { notice(error.message,true); }
-  finally { uploading=false; $("receipt-files").disabled=false; $("receipt-files").value=""; $("upload-label").textContent="사진을 끌어 놓거나 선택하세요"; }
+  finally { uploading=false; $("receipt-files").disabled=false; $("receipt-files").value=""; $("upload-label").textContent="사진·PDF를 끌어 놓거나 선택하세요"; }
 }
 // 파일 선택과 끌어 놓기는 같은 업로드 함수로 연결합니다. 브라우저의 파일 열기 기본 동작은 막습니다.
 $("receipt-files").addEventListener("change",e=>upload(e.target.files));

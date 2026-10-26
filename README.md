@@ -4,7 +4,7 @@
 
 ## 빠른 실행
 
-**고객용 실행:** 릴리스의 `ReceiptToExcel-0.2.0-windows-x64.zip`을 모두 압축 해제하고 **ReceiptToExcel.exe**를 실행합니다. Java·IntelliJ·Maven 설치와 JAVA_HOME 설정 없이 동봉된 실행 환경으로 동작합니다. 준비 후 브라우저가 자동으로 열리며 종료는 관리 창에서 합니다. [Windows 실행·배포 안내](docs/RELEASE.md)
+**고객용 실행:** 릴리스의 `ReceiptToExcel-0.3.0-windows-x64.zip`을 모두 압축 해제하고 **ReceiptToExcel.exe**를 실행합니다. Java·IntelliJ·Maven 설치와 JAVA_HOME 설정 없이 동봉된 실행 환경으로 동작합니다. 준비 후 브라우저가 자동으로 열리며 종료는 관리 창에서 합니다. [Windows 실행·배포 안내](docs/RELEASE.md)
 
 초록색 **Code → Download ZIP**은 개발용 소스이므로 아래 개발 환경이 필요합니다. 고객에게는 위 실행용 릴리스 ZIP을 전달하세요. 개발자는 `build-release.ps1`로 실행용 ZIP을 생성할 수 있습니다.
 
@@ -27,6 +27,10 @@ cd C:\Users\Chung_Seungho\Documents\ReciptToExcel
 Codex가 띄워 둔 미리보기는 `stop-preview.cmd`로 종료할 수 있습니다. 이후 IntelliJ에서 실행하세요. 이 파일은 기록된 미리보기 PID와 프로젝트 JAR 경로가 일치할 때만 종료합니다. 사용자가 IntelliJ 또는 `start-local.cmd`로 실행한 앱은 해당 창에서 종료하세요.
 
 포트 8080이 사용 중이면 환경변수 `PORT=8081` 또는 `application-local.properties`의 `server.port=8081`로 바꿉니다.
+
+## PDF 연속 스캔
+
+한 페이지에 영수증 한 장인 PDF를 페이지별로 등록합니다. PDF는 25MB·최대 20쪽, JPG·PNG는 10MB를 지원합니다. 진행 페이지·중복 제외·실패 페이지를 표시하고 원본 PDF를 보관합니다. [PDF 사용 안내](docs/PDF.md)
 
 ## 실제 사용 순서
 

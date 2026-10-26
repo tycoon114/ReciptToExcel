@@ -39,7 +39,7 @@ public class ApiErrors {
     /** 스프링이 업로드 크기 제한에서 차단한 요청에 413 응답을 반환합니다. */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<?> size() {
-        return ResponseEntity.status(413).body(Map.of("message", "10MB 이하의 JPG/PNG 사진을 선택해 주세요."));
+        return ResponseEntity.status(413).body(Map.of("message", "파일 용량을 확인해 주세요. JPG·PNG는 10MB, PDF는 25MB 이하로 선택해 주세요."));
     }
 
     /** 잘못된 JSON·경로 변수·누락된 요청 항목을 400 응답으로 정리합니다. */

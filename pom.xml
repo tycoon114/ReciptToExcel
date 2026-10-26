@@ -3,12 +3,15 @@
   <modelVersion>4.0.0</modelVersion>
   <!-- 스프링 부트가 호환되는 라이브러리와 빌드 플러그인 버전의 기준을 제공합니다. -->
   <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>4.0.8</version><relativePath/></parent>
-  <groupId>kr.local</groupId><artifactId>receipt-to-excel</artifactId><version>0.2.0</version>
+  <groupId>kr.local</groupId><artifactId>receipt-to-excel</artifactId><version>0.3.0</version>
   <name>ReceiptToExcel</name><description>Local receipt review and expense ledger</description>
   <!-- Java 17을 기준으로 소스와 실행 바이트코드를 빌드합니다. -->
   <properties><java.version>17</java.version></properties>
   <!-- 웹 API·입력 검증·로컬 H2 저장·엑셀 생성·사진 방향 해석에 필요한 의존성입니다. -->
   <dependencies>
+    <!-- 휴대폰 스캔 PDF를 페이지별 이미지로 렌더링하며, 흑백 스캔의 JBIG2 압축도 읽습니다. -->
+    <dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>3.0.8</version></dependency>
+    <dependency><groupId>org.apache.pdfbox</groupId><artifactId>jbig2-imageio</artifactId><version>3.0.5</version></dependency>
     <dependency><groupId>com.drewnoakes</groupId><artifactId>metadata-extractor</artifactId><version>2.21.0</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-webmvc</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId></dependency>

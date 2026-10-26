@@ -51,3 +51,13 @@ CREATE INDEX IF NOT EXISTS idx_bookkeeping_expense ON bookkeeping_entries(expens
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS image_path VARCHAR(100);
 -- 승인번호는 기장 시 사본으로 남겨, 취소 후 원본을 수정해도 당시 값을 보존합니다.
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS approval_number VARCHAR(40) NOT NULL DEFAULT '';
+
+-- PDF 원본은 한 번만 보관하고, 각 영수증은 PDF의 특정 페이지를 가리킵니다.
+CREATE TABLE IF NOT EXISTS pdf_documents (
+ hash VARCHAR(64) PRIMARY KEY, original_name VARCHAR(200) NOT NULL,
+ page_count INT NOT NULL CHECK (page_count BETWEEN 1 AND 20), created_at VARCHAR(40) NOT NULL
+);
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pdf_hash VARCHAR(64) REFERENCES pdf_documents(hash);
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pdf_page INT;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pdf_page_count INT;
+CREATE INDEX IF NOT EXISTS idx_expenses_pdf ON expenses(pdf_hash);

@@ -23,6 +23,7 @@ public class ReceiptService {
     private final ReceiptAnalyzer analyzer;
     private final ReceiptImages photos;
     private final MerchantDirectory merchants;
+    private final PdfDocuments pdfs;
     private final Path images;
 
     /** 스프링이 필요한 객체와 데이터 폴더 설정을 주입하며, 증빙을 보관할 images 하위 폴더를 준비합니다. */
@@ -31,18 +32,53 @@ public class ReceiptService {
             ReceiptAnalyzer analyzer,
             ReceiptImages photos,
             MerchantDirectory merchants,
+            PdfDocuments pdfs,
             @Value("${app.data-dir}") String data)
             throws Exception {
         this.repo = repo;
         this.analyzer = analyzer;
         this.photos = photos;
         this.merchants = merchants;
+        this.pdfs = pdfs;
         images = Path.of(data).resolve("images").toAbsolutePath().normalize();
         Files.createDirectories(images);
     }
 
     /** 등록된 내역과 중복 여부입니다. 중복 사진은 다시 분석하거나 새 행을 만들지 않습니다. */
     public record UploadResult(Expense expense, boolean duplicate) {}
+
+    /** PDF 원본 준비와 페이지 처리를 나누어 브라우저에 현재 페이지와 개별 실패를 표시합니다. */
+    public synchronized PdfDocuments.Document preparePdf(MultipartFile file) throws Exception { return pdfs.prepare(file); }
+
+    /** 같은 원본 PDF의 같은 페이지는 회전·재인식·사용자 수정 여부와 무관하게 중복으로 처리합니다. */
+    public synchronized UploadResult uploadPdfPage(String pdfHash, int pageNumber, String hint) throws Exception {
+        if (hint == null || hint.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
+        var document = pdfs.get(pdfHash);
+        if (pageNumber < 1 || pageNumber > document.pageCount()) throw bad("PDF 페이지 번호를 확인해 주세요.");
+        String pageHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(("PDF:"+pdfHash+":"+pageNumber).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        var existing = repo.byHash(pageHash);
+        if (existing.isPresent()) return new UploadResult(existing.get(), true);
+        Path path = images.resolve(UUID.randomUUID()+".png");
+        try {
+            var rendered = pdfs.render(pdfHash, pageNumber);
+            try { if (!ImageIO.write(rendered, "png", path.toFile())) throw bad("PDF 페이지를 사진으로 저장하지 못했습니다."); }
+            finally { rendered.flush(); }
+            var analysis = analyzer.analyze(path, hint);
+            String name = document.originalName()+" ["+pageNumber+"/"+document.pageCount()+"쪽]";
+            return new UploadResult(repo.insert(analysis,path.getFileName().toString(),pageHash,name,
+                    pdfHash,pageNumber,document.pageCount()),false);
+        } catch (Exception error) { Files.deleteIfExists(path); throw error; }
+    }
+
+    /** 성공한 페이지가 하나라도 있으면 원본을 유지합니다. 실패한 페이지만 재시도할 때 같은 원본을 다시 선택하면 됩니다. */
+    public synchronized void finishPdf(String hash) throws Exception { pdfs.removeIfUnused(hash); }
+
+    public Path originalPdf(long id) {
+        String hash = repo.get(id).pdfHash();
+        if (hash == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"PDF로 등록한 영수증이 아닙니다.");
+        return pdfs.original(hash);
+    }
 
     /** 같은 파일이 동시에 등록되는 것을 줄이기 위해 중복 확인부터 저장까지 순서대로 처리합니다. */
     public synchronized UploadResult upload(MultipartFile file, String hint) throws Exception {
@@ -220,6 +256,10 @@ public class ReceiptService {
         if (e.imagePath() != null) {
             Path p = images.resolve(e.imagePath()).normalize();
             if (p.startsWith(images)) Files.deleteIfExists(p);
+        }
+        if (e.pdfHash() != null) try { pdfs.removeIfUnused(e.pdfHash()); }
+        catch (Exception error) {
+            org.slf4j.LoggerFactory.getLogger(ReceiptService.class).warn("영수증 삭제는 완료했으나 연결 없는 PDF 정리에 실패했습니다.");
         }
     }
 

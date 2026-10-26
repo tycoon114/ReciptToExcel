@@ -201,7 +201,7 @@ class BookReceiptTest {
                         null,
                         "",
                         "",
-                        0, "");
+                        0, "", null, null, null);
         byte[] bytes = new ExcelExporter().export(List.of(e), false);
         try (var book =
                 new org.apache.poi.xssf.usermodel.XSSFWorkbook(
