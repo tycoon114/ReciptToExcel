@@ -193,6 +193,8 @@ java -jar target\receipt-to-excel-0.1.0.jar
 
 테스트는 임시 H2 DB와 임시 이미지 폴더를 사용합니다. 사용자 장부를 변경하지 않습니다. 확정 조건, 세액 합계, 수정 충돌, 필터, 내보내기 합계, 문자열 수식 방지, 잘못된 이미지, 중복 등록, 로컬 요청 제한과 Ollama 구조화 응답을 검증합니다.
 
+GitHub Actions CI는 커밋을 푸시하거나 PR을 만들 때 GitHub의 Windows·Java 17 환경에서 전체 테스트와 JAR 빌드를 실행합니다. 결과는 저장소 **Actions → ReceiptToExcel CI**에서 확인합니다. 최초 등록·수동 실행·실패 확인 방법과 검증 범위는 [CI 사용 안내](docs/CI.md)를 참고하세요. 실제 Windows OCR 인식률 확인과 배포 EXE 생성·릴리스 공개는 별도 작업입니다.
+
 Windows에서 JAR로 앱을 실행 중이면 파일 잠금 때문에 같은 JAR로 다시 패키징할 수 없습니다. `package` 전에 해당 앱을 종료하세요. IntelliJ에서 소스를 실행하는 방식은 JAR를 잠그지 않습니다.
 
 ## 저장·백업·GitHub
