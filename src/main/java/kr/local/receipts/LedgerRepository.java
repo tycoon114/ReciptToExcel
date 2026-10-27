@@ -45,7 +45,7 @@ public class LedgerRepository {
                             r.getString("approval_number"),
                             r.getString("pdf_hash"),
                             r.getObject("pdf_page", Integer.class),
-                            r.getObject("pdf_page_count", Integer.class));
+                            r.getObject("pdf_page_count", Integer.class), r.getString("duplicate_state"));
 
     public LedgerRepository(JdbcTemplate db) {
         this.db = db;

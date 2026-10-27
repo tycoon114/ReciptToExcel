@@ -35,3 +35,21 @@ dialog{border:1px solid #d9e1ed;border-radius:15px;padding:0;color:var(--ink);wi
 #book-cancel-panel{margin-top:16px;padding-top:14px;border-top:1px solid #d7e3f5}
 #book-cancel{margin-top:12px}
 @media(max-width:560px){.book-panel{padding:13px}.book-summary{gap:10px 18px}.book-summary strong{font-size:15px}.bookkeeping-section .section-heading .button{align-self:flex-start}}
+
+/* 중복은 색상과 문구를 함께 표시합니다. 비교 영역은 편집 폼 밖에 두어 실수로 확정되지 않게 합니다. */
+.badge.duplicate-suspected{background:#fee2e2;color:#a51b26;border:1px solid #f3a7af;white-space:nowrap}
+.badge.duplicate-excluded{background:#f0e9eb;color:#76525a;border:1px solid #dbc7cb;white-space:nowrap}
+.duplicate-suspected-row{background:#fff7f7}.duplicate-suspected-row:hover{background:#ffecec}
+.duplicate-excluded-row{background:#faf7f8;color:#8b7278}
+.duplicate-overview{display:flex;gap:15px;justify-content:space-between;align-items:center;border:1px solid #efb0b7;background:#fff2f3;color:#9c2331;border-radius:9px;padding:13px 18px;margin:18px 0;font-size:12px}
+.duplicate-panel{margin:18px 22px;padding:17px;border:1px solid #e9a0a9;background:#fff5f6;border-radius:10px;color:#8e2330}
+.duplicate-panel>h2{font-size:16px;margin:0 0 7px}.duplicate-panel>p{font-size:12px;margin:0 0 13px;line-height:1.6}
+.duplicate-match{border:1px solid #efd0d5;background:#fff;border-radius:8px;padding:14px;margin-top:12px}
+.duplicate-match h3{font-size:13px;margin:0 0 6px}.duplicate-reason{font-size:11px;color:#9e4c56;line-height:1.7}
+.duplicate-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.duplicate-evidence{min-width:0;padding:12px;background:#f8f9fc;border:1px solid #e2e7ee;border-radius:6px;color:#31415a}
+.duplicate-evidence strong{font-size:12px}.duplicate-evidence p{font-size:11px;margin:5px 0;overflow-wrap:anywhere}
+.duplicate-evidence img{display:block;max-height:220px;max-width:100%;margin:10px auto 0;object-fit:contain;background:white;border:1px solid #e1e5eb}
+.duplicate-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}.duplicate-actions button{font-size:11px}
+.duplicate-exclude{color:#a51b26;border-color:#df8f99;background:#fff1f3}
+@media(max-width:560px){.duplicate-panel{margin:12px;padding:12px}.duplicate-pair{grid-template-columns:1fr}.duplicate-overview{align-items:flex-start;flex-direction:column}}

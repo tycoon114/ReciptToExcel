@@ -24,6 +24,7 @@ public class ReceiptService {
     private final ReceiptImages photos;
     private final MerchantDirectory merchants;
     private final PdfDocuments pdfs;
+    private final DuplicateReviewService duplicates;
     private final Path images;
 
     /** 스프링이 필요한 객체와 데이터 폴더 설정을 주입하며, 증빙을 보관할 images 하위 폴더를 준비합니다. */
@@ -32,7 +33,7 @@ public class ReceiptService {
             ReceiptAnalyzer analyzer,
             ReceiptImages photos,
             MerchantDirectory merchants,
-            PdfDocuments pdfs,
+            PdfDocuments pdfs, DuplicateReviewService duplicates,
             @Value("${app.data-dir}") String data)
             throws Exception {
         this.repo = repo;
@@ -40,25 +41,33 @@ public class ReceiptService {
         this.photos = photos;
         this.merchants = merchants;
         this.pdfs = pdfs;
+        this.duplicates = duplicates;
         images = Path.of(data).resolve("images").toAbsolutePath().normalize();
         Files.createDirectories(images);
     }
 
     /** 등록된 내역과 중복 여부입니다. 중복 사진은 다시 분석하거나 새 행을 만들지 않습니다. */
-    public record UploadResult(Expense expense, boolean duplicate) {}
+    public record UploadResult(Expense expense, boolean duplicate, List<DuplicateReviewService.Match> duplicateMatches) {}
+
+    private UploadResult uploadResult(Expense expense, boolean exactDuplicate) {
+        return new UploadResult(repo.get(expense.id()), exactDuplicate, duplicates.report(expense.id()).matches().stream()
+                .filter(m -> m.decision().equals("PENDING")).toList());
+    }
 
     /** PDF 원본 준비와 페이지 처리를 나누어 브라우저에 현재 페이지와 개별 실패를 표시합니다. */
     public synchronized PdfDocuments.Document preparePdf(MultipartFile file) throws Exception { return pdfs.prepare(file); }
 
     /** 같은 원본 PDF의 같은 페이지는 회전·재인식·사용자 수정 여부와 무관하게 중복으로 처리합니다. */
+    @org.springframework.transaction.annotation.Transactional
     public synchronized UploadResult uploadPdfPage(String pdfHash, int pageNumber, String hint) throws Exception {
+        duplicates.lock();
         if (hint == null || hint.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
         var document = pdfs.get(pdfHash);
         if (pageNumber < 1 || pageNumber > document.pageCount()) throw bad("PDF 페이지 번호를 확인해 주세요.");
         String pageHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(("PDF:"+pdfHash+":"+pageNumber).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         var existing = repo.byHash(pageHash);
-        if (existing.isPresent()) return new UploadResult(existing.get(), true);
+        if (existing.isPresent()) return uploadResult(existing.get(), true);
         Path path = images.resolve(UUID.randomUUID()+".png");
         try {
             var rendered = pdfs.render(pdfHash, pageNumber);
@@ -66,8 +75,10 @@ public class ReceiptService {
             finally { rendered.flush(); }
             var analysis = analyzer.analyze(path, hint);
             String name = document.originalName()+" ["+pageNumber+"/"+document.pageCount()+"쪽]";
-            return new UploadResult(repo.insert(analysis,path.getFileName().toString(),pageHash,name,
-                    pdfHash,pageNumber,document.pageCount()),false);
+            Expense saved = repo.insert(analysis,path.getFileName().toString(),pageHash,name,
+                    pdfHash,pageNumber,document.pageCount());
+            duplicates.refresh();
+            return uploadResult(saved,false);
         } catch (Exception error) { Files.deleteIfExists(path); throw error; }
     }
 
@@ -81,7 +92,9 @@ public class ReceiptService {
     }
 
     /** 같은 파일이 동시에 등록되는 것을 줄이기 위해 중복 확인부터 저장까지 순서대로 처리합니다. */
+    @org.springframework.transaction.annotation.Transactional
     public synchronized UploadResult upload(MultipartFile file, String hint) throws Exception {
+        duplicates.lock();
         if (file.isEmpty() || file.getSize() > 10 * 1024 * 1024)
             throw bad("10MB 이하의 JPG 또는 PNG 사진을 선택해 주세요.");
         if (hint.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
@@ -89,7 +102,7 @@ public class ReceiptService {
         // 원본 바이트의 SHA-256으로 중복을 판별하므로 같은 파일명이라도 내용이 다르면 새 사진입니다.
         String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         var existing = repo.byHash(hash);
-        if (existing.isPresent()) return new UploadResult(existing.get(), true);
+        if (existing.isPresent()) return uploadResult(existing.get(), true);
         Path path = null;
         try {
             // 촬영 방향을 픽셀에 반영한 증빙 PNG를 저장한 뒤, 그 사진을 분석과 미리보기에 공통 사용합니다.
@@ -109,7 +122,8 @@ public class ReceiptService {
                             hash,
                             ReceiptAnalyzer.cut(
                                     Objects.toString(file.getOriginalFilename(), "receipt"), 255));
-            return new UploadResult(saved, false);
+            duplicates.refresh();
+            return uploadResult(saved, false);
         } catch (Exception e) {
             // 등록이 끝나지 않은 사진만 되돌려 DB에 연결되지 않은 파일이 쌓이는 것을 줄입니다.
             if (path != null) Files.deleteIfExists(path);
@@ -118,9 +132,12 @@ public class ReceiptService {
     }
 
     /** 새 회전 이미지를 먼저 저장하고 DB 연결을 바꾼 뒤 이전 이미지를 정리합니다. */
+    @org.springframework.transaction.annotation.Transactional
     public synchronized Expense rotate(long id, int version, int quarterTurns) throws Exception {
+        duplicates.lock();
         Expense current = repo.get(id);
         checkVersion(current, version);
+        assertNotExcluded(current);
         repo.assertNotPosted(id);
         Path old = image(id), replacement = images.resolve(UUID.randomUUID() + ".png");
         var source = ImageIO.read(old.toFile());
@@ -133,13 +150,15 @@ public class ReceiptService {
                 rotated.flush();
             }
             Expense updated = repo.rotate(id, version, replacement.getFileName().toString());
+            duplicates.invalidateImage(id);
+            duplicates.refresh();
             // DB가 완성된 새 이미지를 가리킨 다음에만 이전 이미지를 삭제합니다.
             try {
                 if (!repo.isBookkeepingEvidence(old.getFileName().toString())) Files.deleteIfExists(old);
             } catch (Exception ignored) {
                 // 이전 사진 정리 실패 때문에 이미 완료된 새 증빙 연결을 되돌리지는 않습니다.
             }
-            return updated;
+            return repo.get(id);
         } catch (Exception e) {
             Files.deleteIfExists(replacement);
             throw e;
@@ -149,9 +168,12 @@ public class ReceiptService {
     }
 
     /** 최신 사진을 재분석하고 직접 작성한 문맥은 보존합니다. 이전의 잘못된 도서 기본값은 재검토합니다. */
+    @org.springframework.transaction.annotation.Transactional
     public synchronized Expense reanalyze(long id, int version, String hint) {
+        duplicates.lock();
         Expense current = repo.get(id);
         checkVersion(current, version);
+        assertNotExcluded(current);
         repo.assertNotPosted(id);
         String purpose = hint == null ? current.description() : hint;
         if (purpose.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
@@ -163,8 +185,8 @@ public class ReceiptService {
         var analysis = analyzer.analyze(image(id), purpose);
         if (analysis.source().equals("OCR_RULES") && analysis.text().isBlank())
             throw bad("문자를 다시 읽지 못했습니다. 기존 입력은 유지됩니다. 사진 방향이나 선명도를 확인해 주세요.");
-        return repo.reanalyze(id, version, analysis,
-                staleBookDefault && !"도서인쇄비".equals(analysis.category()));
+        repo.reanalyze(id, version, analysis, staleBookDefault && !"도서인쇄비".equals(analysis.category()));
+        duplicates.refresh(); return repo.get(id);
     }
 
     /** 화면을 연 뒤 다른 창에서 바뀐 내역을 덮어쓰지 못하게 저장 버전을 비교합니다. */
@@ -197,7 +219,12 @@ public class ReceiptService {
     }
 
     /** 분류·날짜·세액을 검증합니다. 필수 항목이 갖춰진 내역만 확정하고 거래처 보정을 기억합니다. */
-    public Expense save(long id, ExpenseInput x) {
+    @org.springframework.transaction.annotation.Transactional
+    public synchronized Expense save(long id, ExpenseInput x) {
+        duplicates.lock();
+        Expense current = repo.get(id);
+        checkVersion(current, x.version());
+        assertNotExcluded(current);
         if (!Set.of("REVIEW", "CONFIRMED").contains(x.status())) throw bad("잘못된 검토 상태입니다.");
         if (!ReceiptAnalyzer.CATEGORIES.contains(x.category())
                 || !ReceiptAnalyzer.PAYMENTS.contains(x.paymentMethod()))
@@ -226,7 +253,10 @@ public class ReceiptService {
                         || x.amount() == null
                         || x.category().equals("미분류")))
             throw bad("확정하려면 날짜·거래처·계정과목·적요·총금액을 입력해 주세요.");
+        if (x.status().equals("CONFIRMED")) duplicates.assertConfirmable(current, x);
         Expense updated = repo.update(id, x);
+        duplicates.refresh();
+        updated = repo.get(id);
         if (updated.status().equals("CONFIRMED"))
             try {
                 // 사용자가 확정한 거래처만 기억하며, 사전 저장 실패가 장부 저장 성공을 취소하지는 않습니다.
@@ -250,9 +280,12 @@ public class ReceiptService {
     }
 
     /** 내역 삭제 후 연결 사진을 정리합니다. 파일 삭제 범위는 증빙 폴더 내부로 제한합니다. */
+    @org.springframework.transaction.annotation.Transactional
     public synchronized void delete(long id) throws Exception {
+        duplicates.lock();
         var e = repo.get(id);
         repo.delete(id);
+        duplicates.refresh();
         if (e.imagePath() != null) {
             Path p = images.resolve(e.imagePath()).normalize();
             if (p.startsWith(images)) Files.deleteIfExists(p);
@@ -306,7 +339,10 @@ public class ReceiptService {
                                 category == null
                                         || category.isBlank()
                                         || e.category().equals(category))
-                .filter(e -> status == null || status.isBlank() || e.status().equals(status))
+                .filter(e -> status == null || status.isBlank()
+                        || status.equals("SUSPECTED") && e.duplicateState().equals("SUSPECTED")
+                        || status.equals("EXCLUDED") && e.duplicateState().equals("EXCLUDED")
+                        || e.status().equals(status) && e.duplicateState().equals("NONE"))
                 .filter(
                         e ->
                                 (e.vendor()
@@ -327,5 +363,9 @@ public class ReceiptService {
     /** 사용자가 입력이나 설정을 고칠 수 있는 문제를 400 오류로 표현합니다. */
     static ResponseStatusException bad(String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private void assertNotExcluded(Expense e) {
+        if ("EXCLUDED".equals(e.duplicateState())) throw bad("중복 제외된 내역입니다. 제외를 취소한 뒤 수정해 주세요.");
     }
 }

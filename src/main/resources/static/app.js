@@ -34,10 +34,14 @@ function cell(value, className) { const td = document.createElement("td"); td.te
 // 현재 조회 결과를 그립니다. 합계에는 확정 건만 더하고 검토 건은 별도로 셉니다.
 function render() {
   const body = $("ledger-body"); body.replaceChildren();
-  let amount = 0, confirmed = 0, review = 0;
+  let amount = 0, confirmed = 0, review = 0, suspected = 0;
   for(const expense of rows) {
-    if(expense.status === "CONFIRMED") { amount += expense.amount || 0; confirmed++; } else review++;
+    const state=expense.duplicateState||"NONE";
+    if(state==="SUSPECTED")suspected++;
+    else if(state!=="EXCLUDED"){if(expense.status === "CONFIRMED") { amount += expense.amount || 0; confirmed++; } else review++;}
     const tr = document.createElement("tr");
+    if(state==="SUSPECTED")tr.className="duplicate-suspected-row";
+    if(state==="EXCLUDED")tr.className="duplicate-excluded-row";
     tr.append(cell(expense.receiptDate || "날짜 미확인"));
     const vendor = cell(expense.vendor || "거래처 미확인"); const description = document.createElement("small"); description.textContent = expense.description || "적요를 입력해 주세요"; vendor.append(description); tr.append(vendor);
     if(expense.pdfHash){const source=document.createElement("small");source.textContent=`PDF · ${expense.pdfPage}/${expense.pdfPageCount}쪽`;source.title=expense.originalName;vendor.append(source);}
@@ -46,12 +50,16 @@ function render() {
     const payment = cell(expense.paymentMethod), approval = document.createElement("small");
     approval.textContent=expense.approvalNumber?"승인번호 "+expense.approvalNumber:""; payment.append(approval);
     tr.append(note,payment,cell(money(expense.amount)+(expense.amount==null?"":" 원"),"numeric"));
-    const status = cell(""); const badge = document.createElement("span"); badge.className="badge"+(expense.status==="CONFIRMED"?"":" review"); badge.textContent=expense.status==="CONFIRMED"?"확정":"검토 대기"; status.append(badge); tr.append(status,BookkeepingUI.statusCell(expense));
+    const status = cell(""); const badge = document.createElement("span");
+    badge.className="badge"+(state==="SUSPECTED"?" duplicate-suspected":state==="EXCLUDED"?" duplicate-excluded":expense.status==="CONFIRMED"?"":" review");
+    badge.textContent=state==="SUSPECTED"?"⚠ 중복 의심":state==="EXCLUDED"?"중복 제외":expense.status==="CONFIRMED"?"확정":"검토 대기";
+    status.append(badge); tr.append(status,BookkeepingUI.statusCell(expense));
     const action=cell(""); const button=document.createElement("button"); button.className="text-button"; button.textContent="검토 →"; button.setAttribute("aria-label",(expense.vendor||"영수증")+" 검토"); action.append(button); tr.append(action);
     tr.addEventListener("click",()=>openEditor(expense)); body.append(tr);
   }
   $("total-amount").replaceChildren(document.createTextNode(money(amount))); const unit=document.createElement("span"); unit.textContent=" 원"; $("total-amount").append(unit);
   $("confirmed-count").textContent=confirmed+" 건"; $("review-count").textContent=review+" 건"; $("row-count").textContent=rows.length;
+  $("duplicate-overview").hidden=suspected===0;$("duplicate-overview-text").textContent=`현재 목록의 중복 의심 ${suspected}건 · 원본을 비교한 뒤 별개 거래로 확인하거나 중복으로 제외해 주세요.`;
   $("empty-state").hidden=rows.length>0;
   $("empty-state").querySelector("h3").textContent=filters().get("query") || filters().get("month") || filters().get("category") || filters().get("status")?"조회 조건에 맞는 내역이 없습니다":"첫 영수증을 등록해 보세요";
 }
@@ -66,16 +74,16 @@ function openEditor(expense) {
   if(expense.imagePath) { $("receipt-preview").src=`/api/expenses/${expense.id}/image?v=${expense.version}`; $("original-link").href=`/api/expenses/${expense.id}/image?v=${expense.version}`; } else $("receipt-preview").removeAttribute("src");
   $("analysis-source").textContent=expense.analysisSource==="OLLAMA"?"로컬 AI 분석":expense.analysisSource==="OCR_RULES"?"기본 모드 · Windows OCR + 규칙 분류":"직접 입력";
   $("analysis-message").textContent=expense.analysisMessage; $("ocr-text").textContent=expense.ocrText||"인식된 원문이 없습니다."; $("edit-error").hidden=true;
-  BookkeepingUI.open(expense);
+  DuplicateUI.open(expense);BookkeepingUI.open(expense);
   if(!$("editor").open) $("editor").showModal();
 }
 // 사진과 PDF를 순서대로 처리합니다. PDF는 한 페이지를 한 영수증으로 등록하고 페이지별 진행·실패를 표시합니다.
 async function upload(files) {
   if(uploading || !files.length) return;
   uploading=true; $("receipt-files").disabled=true;
-  const selected=Array.from(files); let saved=0, duplicate=0, units=0; const errors=[]; let latest;
+  const selected=Array.from(files); let saved=0, duplicate=0, units=0, suspected=0; const errors=[],results=[]; let latest;
   const hint=$("upload-hint").value.trim();
-  const record=result=>{units++;if(result.duplicate)duplicate++;else{saved++;latest=result.expense;}};
+  const record=result=>{units++;results.push(result);if(result.duplicate)duplicate++;else{saved++;latest=result.expense;if(result.expense.duplicateState==="SUSPECTED")suspected++;}};
   try {
     for(let i=0;i<selected.length;i++) {
       const file=selected[i], isPdf=file.type==="application/pdf" || /\.pdf$/i.test(file.name);
@@ -101,20 +109,20 @@ async function upload(files) {
           }
         }else{
           const result=await api("/api/receipts",{method:"POST",body:data});record(result);
-          if(result.duplicate && selected.length===1)alert(`${file.name}\n이미 등록된 영수증입니다. 추가 등록하지 않았습니다.`);
         }
       }
       catch(error) { errors.push(file.name+": "+error.message); }
     }
     await load();
+    DuplicateUI.notifyUpload(results);
     notice(
-        `신규 등록 ${saved}건 · 중복으로 등록 제외 ${duplicate}건` +
+        `신규 등록 ${saved}건 · 동일 파일 중복 제외 ${duplicate}건` + (suspected?` · 중복 의심 ${suspected}건 (확정 전 확인 필요)`:"") +
         (errors.length ? "\n" + errors.join("\n") : ""),
-        errors.length > 0
+        errors.length > 0 || suspected > 0
     );
     if(selected.length===1 && units===1 && errors.length===0 && latest) openEditor(latest);
   } catch(error) { notice(error.message,true); }
-  finally { uploading=false; $("receipt-files").disabled=false; $("receipt-files").value=""; $("upload-label").textContent="사진·PDF를 끌어 놓거나 선택하세요"; }
+  finally { uploading=false; $("receipt-files").disabled=false; $("receipt-files").value=""; $("upload-label").textContent="사진·PDF를 끌어 놓거나 선택하세요";BookkeepingUI.applyLocks();DuplicateUI.applyLocks(); }
 }
 // 파일 선택과 끌어 놓기는 같은 업로드 함수로 연결합니다. 브라우저의 파일 열기 기본 동작은 막습니다.
 $("receipt-files").addEventListener("change",e=>upload(e.target.files));
@@ -127,8 +135,8 @@ $("reset-button").addEventListener("click",()=>{$("filters").reset();load().catc
 for(const id of ["filter-month","filter-category","filter-status","filter-sort"]) $(id).addEventListener("change",()=>load().catch(e=>notice(e.message,true)));
 $("refresh-button").addEventListener("click",()=>load().catch(e=>notice(e.message,true)));
 $("manual-button").addEventListener("click",async()=>{try { const expense=await api("/api/expenses",{method:"POST"}); await load(); openEditor(expense); } catch(e) { notice(e.message,true); }});
-document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>{if(!photoBusy && !BookkeepingUI.isBusy())$("editor").close();}));
-$("editor").addEventListener("cancel",e=>{if(photoBusy || BookkeepingUI.isBusy())e.preventDefault();});
+document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>{if(!photoBusy && !BookkeepingUI.isBusy() && !DuplicateUI.isBusy())$("editor").close();}));
+$("editor").addEventListener("cancel",e=>{if(photoBusy || BookkeepingUI.isBusy() || DuplicateUI.isBusy())e.preventDefault();});
 // 회전은 입력 초안을 모두 보존하고, 재인식은 직접 작성한 문맥을 보존하면서 추출 필드만 갱신합니다.
 async function photoAction(action, quarterTurns=0) {
   if(photoBusy)return;
@@ -162,7 +170,7 @@ $("edit-form").addEventListener("submit",async e=>{
   e.preventDefault(); const data={version:Number($("edit-version").value),status:e.submitter?.value||"REVIEW"};
   for(const field of fields) { const value=$("edit-"+field).value.trim(); data[field]=["amount","supplyAmount","vatAmount"].includes(field)?(value===""?null:Number(value)):value; }
   const buttons=Array.from($("edit-form").querySelectorAll("button")); buttons.forEach(b=>b.disabled=true);
-  try { await api("/api/expenses/"+$("edit-id").value,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}); $("editor").close(); await load(); notice(data.status==="CONFIRMED"?"영수증을 확정했습니다. 장부와 엑셀 내보내기에 반영됩니다.":"검토 대기로 저장했습니다."); }
+  try { const saved=await api("/api/expenses/"+$("edit-id").value,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}); $("editor").close(); await load(); notice(data.status==="CONFIRMED"?"영수증을 확정했습니다. 장부와 엑셀 내보내기에 반영됩니다.":saved.duplicateState==="SUSPECTED"?"중복 의심 내역으로 저장했습니다. 원본을 비교한 뒤 판단해 주세요.":"검토 대기로 저장했습니다.",saved.duplicateState==="SUSPECTED"); }
   catch(error) { $("edit-error").textContent=error.message; $("edit-error").hidden=false; }
   finally { buttons.forEach(b=>b.disabled=false);BookkeepingUI.applyLocks(); }
 });

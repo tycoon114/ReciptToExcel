@@ -27,6 +27,9 @@ class BookkeepingMigrationTest {
         assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM bookkeeping_entries",Integer.class));
         assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM pdf_documents",Integer.class));
         assertNull(db.queryForObject("SELECT pdf_hash FROM expenses WHERE id=77",String.class));
+        assertEquals("NONE",db.queryForObject("SELECT duplicate_state FROM expenses WHERE id=77",String.class));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM receipt_duplicate_matches",Integer.class));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM receipt_duplicate_lock",Integer.class));
         assertEquals("",db.queryForObject("SELECT approval_number FROM expenses WHERE id=77",String.class));
         db.update("UPDATE expenses SET approval_number='00001234' WHERE id=77");
         run(dataSource,script);

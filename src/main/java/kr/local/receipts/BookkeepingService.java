@@ -100,6 +100,7 @@ public class BookkeepingService {
         if (db.queryForObject("SELECT COUNT(*) FROM bookkeeping_entries WHERE active_expense_id=?", Long.class, expenseId) > 0)
             throw conflict("이미 기장된 영수증입니다. 기존 전표를 확인하세요.");
         version(source, input.version());
+        if (!"NONE".equals(source.duplicateState())) throw conflict("중복 의심 또는 중복 제외된 내역입니다. 중복 검토를 먼저 마쳐 주세요.");
         if (!"CONFIRMED".equals(source.status())) throw ReceiptService.bad("영수증 내용을 먼저 저장·확정한 뒤 기장해 주세요.");
         if (source.amount() == null || source.amount() <= 0 || source.receiptDate() == null
                 || source.vendor().isBlank() || source.description().isBlank()

@@ -61,3 +61,21 @@ ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pdf_hash VARCHAR(64) REFERENCES pd
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pdf_page INT;
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pdf_page_count INT;
 CREATE INDEX IF NOT EXISTS idx_expenses_pdf ON expenses(pdf_hash);
+
+-- 중복 검토는 회계 확정 상태와 별개입니다. 제외된 내역도 증빙과 판단 기록을 보존합니다.
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS duplicate_state VARCHAR(20) NOT NULL DEFAULT 'NONE';
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS visual_fingerprint VARCHAR(1600);
+CREATE TABLE IF NOT EXISTS receipt_duplicate_matches (
+ expense_id BIGINT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+ candidate_id BIGINT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+ signature VARCHAR(64) NOT NULL,
+ reason VARCHAR(1500) NOT NULL,
+ strength VARCHAR(20) NOT NULL,
+ decision VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (decision IN ('PENDING','DISTINCT','EXCLUDED')),
+ decided_at VARCHAR(40),
+ PRIMARY KEY(expense_id,candidate_id), CHECK (expense_id > candidate_id)
+);
+CREATE INDEX IF NOT EXISTS idx_duplicate_candidate ON receipt_duplicate_matches(candidate_id);
+-- 서로 다른 업로드 요청도 DB 커밋까지 순서를 지켜 두 번째 요청이 첫 번째 내역을 놓치지 않게 합니다.
+CREATE TABLE IF NOT EXISTS receipt_duplicate_lock (id INT PRIMARY KEY CHECK (id=1));
+INSERT INTO receipt_duplicate_lock(id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM receipt_duplicate_lock WHERE id=1);

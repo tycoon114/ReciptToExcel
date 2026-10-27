@@ -21,18 +21,20 @@ public class ApiController {
     private final ReceiptAnalyzer analyzer;
     private final ExcelExporter excel;
     private final GoogleSheetsSync sheets;
+    private final DuplicateReviewService duplicates;
 
     public ApiController(
             LedgerRepository repo,
             ReceiptService service,
             ReceiptAnalyzer analyzer,
             ExcelExporter excel,
-            GoogleSheetsSync sheets) {
+            GoogleSheetsSync sheets, DuplicateReviewService duplicates) {
         this.repo = repo;
         this.service = service;
         this.analyzer = analyzer;
         this.excel = excel;
         this.sheets = sheets;
+        this.duplicates = duplicates;
     }
 
     /** 화면 선택 목록과 연결 여부를 제공합니다. 서비스 계정 키나 비밀번호는 응답하지 않습니다. */
@@ -67,6 +69,27 @@ public class ApiController {
     /** 기장 목록에서 연결된 영수증을 다시 열 때 사용하는 단건 조회입니다. */
     @GetMapping("/expenses/{id}")
     public Expense get(@PathVariable long id) { return repo.get(id); }
+
+    /** 의심 근거와 비교할 기존 증빙을 조회합니다. 확정 상태나 원본 내용을 변경하지 않습니다. */
+    @GetMapping("/expenses/{id}/duplicates")
+    public DuplicateReviewService.Report duplicates(@PathVariable long id) { return duplicates.report(id); }
+
+    public record DuplicateDecision(@jakarta.validation.constraints.Min(0) int version,
+            @jakarta.validation.constraints.NotNull Long candidateId,
+            @jakarta.validation.constraints.Min(0) int candidateVersion,
+            @jakarta.validation.constraints.NotBlank String signature,
+            @jakarta.validation.constraints.NotBlank String decision) {}
+
+    @PostMapping("/expenses/{id}/duplicate-review")
+    public Expense reviewDuplicate(@PathVariable long id, @Valid @RequestBody DuplicateDecision input) {
+        return duplicates.decide(id,input.version(),input.candidateId(),input.candidateVersion(),input.signature(),input.decision());
+    }
+
+    public record RestoreDuplicate(@jakarta.validation.constraints.Min(0) int version) {}
+    @PostMapping("/expenses/{id}/duplicate-restore")
+    public Expense restoreDuplicate(@PathVariable long id, @Valid @RequestBody RestoreDuplicate input) {
+        return duplicates.restore(id,input.version());
+    }
 
     /** 사진과 업무 목적을 받아 분석한 뒤 검토 대기로 등록합니다. 중복이면 기존 내역을 돌려줍니다. */
     @PostMapping(value = "/receipts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

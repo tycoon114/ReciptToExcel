@@ -64,10 +64,10 @@ const BookkeepingUI = (() => {
   // 화면에서 기장 증빙을 잠그며 서버도 같은 조건을 검사합니다. 취소 이력이 있으면 삭제할 수 없습니다.
   function applyLocks(){
     if(!source)return;
-    const posted=activeFor(source.id), eligible=source.status==="CONFIRMED";
-    for(const field of fields)el("edit-"+field).disabled=!!posted || busy;
-    for(const id of ["rotate-left","rotate-right","reanalyze-button"])el(id).disabled=!!posted || busy;
-    document.querySelectorAll('#edit-form button[type="submit"]').forEach(b=>b.disabled=!!posted || busy);
+    const posted=activeFor(source.id), excluded=source.duplicateState==="EXCLUDED",eligible=source.status==="CONFIRMED" && !excluded && source.duplicateState!=="SUSPECTED";
+    for(const field of fields)el("edit-"+field).disabled=!!posted || excluded || busy;
+    for(const id of ["rotate-left","rotate-right","reanalyze-button"])el(id).disabled=!!posted || excluded || busy;
+    document.querySelectorAll('#edit-form button[type="submit"]').forEach(b=>b.disabled=!!posted || excluded || busy);
     el("delete-button").disabled=hasHistory(source.id) || busy;
     for(const id of ["book-date","book-by","book-credit","book-tax","book-memo"])el(id).disabled=!!posted || !eligible || busy;
     el("book-post").hidden=!!posted;el("book-post").disabled=!eligible || busy;
@@ -78,6 +78,8 @@ const BookkeepingUI = (() => {
       ? `${posted.entryNumber} · ${posted.postedBy} · ${new Date(posted.postedAt).toLocaleString("ko-KR")} · 수정하려면 기장을 취소하세요.`
       : eligible?"영수증 확정과 기장은 별개입니다. 저장된 내역과 상대계정을 확인한 뒤 기장하세요."
       : "먼저 ‘확정하여 장부에 반영’을 눌러 저장하고, 영수증을 다시 열어 기장하세요.";
+    if(excluded || source.duplicateState==="SUSPECTED")el("book-entry-info").textContent="중복 검토를 먼저 마쳐야 확정·기장할 수 있습니다.";
+    DuplicateUI.applyLocks();
   }
 
   function preview(){
