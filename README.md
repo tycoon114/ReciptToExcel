@@ -4,11 +4,11 @@
 
 ## 빠른 실행
 
-**고객용 실행:** 릴리스의 `ReceiptToExcel-0.3.1-windows-x64.zip`을 모두 압축 해제하고 **ReceiptToExcel.exe**를 실행합니다. Java·IntelliJ·Maven 설치와 JAVA_HOME 설정 없이 동봉된 실행 환경으로 동작합니다. 준비 후 브라우저가 자동으로 열리며 종료는 관리 창에서 합니다. [Windows 실행·배포 안내](docs/RELEASE.md) · [0.3.1 변경 사항](docs/RELEASE_NOTES.md)
+**고객용 실행:** 릴리스의 `ReceiptToExcel-0.4.0-windows-x64.zip`을 모두 압축 해제하고 **ReceiptToExcel.exe**를 실행합니다. Java·IntelliJ·Maven 설치와 JAVA_HOME 설정 없이 동봉된 실행 환경으로 동작합니다. 준비 후 브라우저가 자동으로 열리며 종료는 관리 창에서 합니다. [Windows 실행·배포 안내](docs/RELEASE.md) · [0.4.0 변경 사항](docs/RELEASE_NOTES.md)
 
 초록색 **Code → Download ZIP**은 개발용 소스이므로 아래 개발 환경이 필요합니다. 고객에게는 위 실행용 릴리스 ZIP을 전달하세요. 개발자는 `build-release.ps1`로 실행용 ZIP을 생성할 수 있습니다.
 
-현재 소스에 추가된 중복 검토 기능은 다른 형식의 영수증이 기존 내역과 겹치면 빨간색 **중복 의심**으로 표시합니다. 확정 전 두 증빙을 비교하고 별개 거래인지 중복 제외할지 선택합니다. 기존 0.3.1 배포 ZIP에는 아직 포함되지 않은 변경입니다. [중복 검토 사용 안내](docs/DUPLICATES.md)
+0.4.0부터 다른 형식의 영수증이 기존 내역과 겹치면 빨간색 **중복 의심**으로 표시합니다. 확정 전 두 증빙을 비교하고 별개 거래인지 중복 제외할지 선택합니다. [중복 검토 사용 안내](docs/DUPLICATES.md)
 
 **IntelliJ IDEA**에서 이 폴더를 Open → Maven 프로젝트로 가져옵니다.
 
@@ -190,7 +190,7 @@ src/test/java/             # 실제 HTTP·DB·XLSX·로컬 AI 프로토콜 테�
 ```powershell
 .\mvnw.cmd test
 .\mvnw.cmd package
-java -jar target\receipt-to-excel-0.3.1.jar
+java -jar target\receipt-to-excel-0.4.0.jar
 ```
 
 테스트는 임시 H2 DB와 임시 이미지 폴더를 사용합니다. 사용자 장부를 변경하지 않습니다. 확정 조건, 세액 합계, 수정 충돌, 필터, 내보내기 합계, 문자열 수식 방지, 잘못된 이미지, 중복 등록, 로컬 요청 제한과 Ollama 구조화 응답을 검증합니다.
