@@ -21,7 +21,7 @@ public class BookkeepingExporter {
             CellStyle money = book.createCellStyle(); money.setDataFormat(book.createDataFormat().getFormat("#,##0"));
             CellStyle date = book.createCellStyle(); date.setDataFormat(book.createDataFormat().getFormat("yyyy-mm-dd"));
             var journal = sheet(book, "분개장", "기장 완료 전표만 포함 · 취소 전표 제외 · 원 단위 · 경비 지출 기장 보조 자료",
-                    List.of("전표번호","기장일","거래일","영수증ID","거래처","적요","구분","계정과목","차변(원)","대변(원)","기장자","승인번호"), header);
+                    List.of("전표번호","기장일","거래일","영수증ID","거래처","적요","구분","계정과목","차변(원)","대변(원)","기장자","승인번호","사업자등록번호","거래시간","거래처주소"), header);
             var totals = new TreeMap<String,long[]>();
             int row = 4; long debit = 0, credit = 0;
             for (var entry : entries) {
@@ -30,13 +30,14 @@ public class BookkeepingExporter {
                     boolean dr = line.side().equals("차변");
                     write(journal, row++, List.of(entry.entryNumber(), LocalDate.parse(entry.entryDate()),
                             LocalDate.parse(entry.receiptDate()), entry.expenseId(), entry.vendor(), entry.memo(),
-                            line.side(), line.account(), dr ? line.amount() : 0L, dr ? 0L : line.amount(), entry.postedBy(), entry.approvalNumber()), money, date);
+                            line.side(), line.account(), dr ? line.amount() : 0L, dr ? 0L : line.amount(), entry.postedBy(), entry.approvalNumber(),
+                            entry.businessNumber(), entry.receiptTime(), entry.vendorAddress()), money, date);
                     long[] sum = totals.computeIfAbsent(line.account(), ignored -> new long[2]);
                     sum[dr ? 0 : 1] += line.amount();
                     if (dr) debit += line.amount(); else credit += line.amount();
                 }
             }
-            journal.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,11));
+            journal.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,14));
             write(journal, row+1, List.of("합계","","","","","","","",debit,credit,"",""), money, date);
             var accounts = sheet(book, "계정별발생", "활성 전표의 차변·대변 발생 합계 · 기초 잔액·매출·결산 미포함 · 잔액이나 재무제표가 아닙니다.",
                     List.of("계정과목","차변 발생액(원)","대변 발생액(원)"), header);
@@ -45,12 +46,13 @@ public class BookkeepingExporter {
             accounts.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,2));
             write(accounts,row+1,List.of("합계",debit,credit),money,date);
             var cancelled = sheet(book, "기장취소이력", "취소 전표 원본을 보존한 검토 자료 · 분개장과 발생 합계에서는 제외됩니다.",
-                    List.of("전표번호","기장일","영수증ID","거래처","적요","원전표 금액(원)","기장자","취소자","취소시각(UTC)","취소사유","승인번호"),header);
+                    List.of("전표번호","기장일","영수증ID","거래처","적요","원전표 금액(원)","기장자","취소자","취소시각(UTC)","취소사유","승인번호","사업자등록번호","거래시간","거래처주소"),header);
             row = 4;
             for (var entry : entries) if (entry.status().equals("CANCELLED"))
                 write(cancelled,row++,List.of(entry.entryNumber(),LocalDate.parse(entry.entryDate()),entry.expenseId(),entry.vendor(),
-                        entry.memo(),entry.totalAmount(),entry.postedBy(),entry.cancelledBy(),entry.cancelledAt(),entry.cancelReason(),entry.approvalNumber()),money,date);
-            cancelled.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,10));
+                        entry.memo(),entry.totalAmount(),entry.postedBy(),entry.cancelledBy(),entry.cancelledAt(),entry.cancelReason(),entry.approvalNumber(),
+                        entry.businessNumber(),entry.receiptTime(),entry.vendorAddress()),money,date);
+            cancelled.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,13));
             book.write(output);
             return output.toByteArray();
         }
@@ -63,7 +65,7 @@ public class BookkeepingExporter {
         var row = sheet.createRow(3);
         for (int i=0;i<headers.size();i++) {
             var cell = row.createCell(i); cell.setCellValue(headers.get(i)); cell.setCellStyle(style);
-            sheet.setColumnWidth(i, (i==0 || headers.get(i).contains("적요") || headers.get(i).contains("사유") ? 34 : 22)*256);
+            sheet.setColumnWidth(i, (headers.get(i).contains("주소") ? 52 : i==0 || headers.get(i).contains("적요") || headers.get(i).contains("사유") ? 34 : 22)*256);
         }
         sheet.createFreezePane(0,4); sheet.setDisplayGridlines(false);
         sheet.setAutoFilter(new CellRangeAddress(3,3,0,headers.size()-1));

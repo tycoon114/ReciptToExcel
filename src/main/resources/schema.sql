@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS expenses (
 
 -- 기존 장부도 다시 만들지 않고 선택 항목을 보완합니다. 과거 내역의 승인번호는 빈칸으로 남깁니다.
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approval_number VARCHAR(40) NOT NULL DEFAULT '';
+-- 과거 장부는 그대로 보존합니다. 새 선택 항목은 재인식하거나 사용자가 입력할 때 채웁니다.
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS business_number VARCHAR(12) NOT NULL DEFAULT '';
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_time VARCHAR(8) NOT NULL DEFAULT '';
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_address VARCHAR(300) NOT NULL DEFAULT '';
 
 -- 영수증 지출 전표입니다. 영수증을 확정하는 것과 실제 기장하는 것을 별도로 관리합니다.
 -- 전표의 상호·날짜·계정·금액은 기장 당시의 사본이며, 취소해도 삭제하지 않습니다.
@@ -51,6 +55,10 @@ CREATE INDEX IF NOT EXISTS idx_bookkeeping_expense ON bookkeeping_entries(expens
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS image_path VARCHAR(100);
 -- 승인번호는 기장 시 사본으로 남겨, 취소 후 원본을 수정해도 당시 값을 보존합니다.
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS approval_number VARCHAR(40) NOT NULL DEFAULT '';
+-- 취소 후 영수증을 수정하더라도 기장 당시 거래처 식별정보와 시각은 사본으로 보존합니다.
+ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS business_number VARCHAR(12) NOT NULL DEFAULT '';
+ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS receipt_time VARCHAR(8) NOT NULL DEFAULT '';
+ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS vendor_address VARCHAR(300) NOT NULL DEFAULT '';
 
 -- PDF 원본은 한 번만 보관하고, 각 영수증은 PDF의 특정 페이지를 가리킵니다.
 CREATE TABLE IF NOT EXISTS pdf_documents (

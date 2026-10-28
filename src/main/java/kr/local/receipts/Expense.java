@@ -29,6 +29,9 @@ package kr.local.receipts;
  * @param pdfPage PDF의 원래 페이지 번호이며 1부터 시작
  * @param pdfPageCount 원본 PDF의 전체 페이지 수
  * @param duplicateState NONE은 일반 검토, SUSPECTED는 중복 의심, EXCLUDED는 중복 제외이며 회계 확정 상태와 별도입니다.
+ * @param businessNumber 거래처 사업자등록번호이며 미확인은 빈 문자열
+ * @param receiptTime 영수증에 명시된 거래 시각이며 HH:mm 또는 HH:mm:ss
+ * @param vendorAddress 거래처 주소이며 미확인은 빈 문자열
  */
 public record Expense(
         Long id,
@@ -56,4 +59,7 @@ public record Expense(
         String pdfHash,
         Integer pdfPage,
         Integer pdfPageCount,
-        String duplicateState) {}
+        String duplicateState,
+        String businessNumber,
+        String receiptTime,
+        String vendorAddress) {}

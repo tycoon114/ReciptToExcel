@@ -42,7 +42,7 @@ try {
     $packageRoot = Join-Path $imageRoot 'ReceiptToExcel'
     Copy-Item -LiteralPath 'docs\RELEASE.md' -Destination (Join-Path $packageRoot 'README.md')
     New-Item -ItemType Directory -Path (Join-Path $packageRoot 'docs') | Out-Null
-    Copy-Item -LiteralPath 'docs\BOOKKEEPING.md','docs\APPROVAL_NUMBER.md','docs\PDF.md','docs\DUPLICATES.md','docs\RELEASE_NOTES.md' -Destination (Join-Path $packageRoot 'docs')
+    Copy-Item -LiteralPath 'docs\BOOKKEEPING.md','docs\APPROVAL_NUMBER.md','docs\PDF.md','docs\DUPLICATES.md','docs\RECEIPT_FIELDS.md','docs\RELEASE_NOTES.md' -Destination (Join-Path $packageRoot 'docs')
     # Java 배포판의 고지·버전과 jlink의 runtime/legal을 함께 전달합니다.
     Copy-Item -LiteralPath (Join-Path $JdkHome 'release') -Destination (Join-Path $packageRoot 'runtime-version.txt')
     foreach ($noticeName in @('NOTICE','LICENSE')) {

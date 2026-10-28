@@ -96,7 +96,7 @@ public class DuplicateReviewService {
         if ("EXCLUDED".equals(source.duplicateState())) throw conflict("중복 제외된 내역입니다. 제외를 취소한 뒤 검토해 주세요.");
         if (source.imagePath() == null) return;
         var all = repo.all(); var hashes = visuals(all);
-        Evidence proposed = new Evidence(input.receiptDate(),input.amount(),merchant(input.vendor()),business(source.ocrText()),
+        Evidence proposed = new Evidence(input.receiptDate(),input.amount(),merchant(input.vendor()),businessNumber(input.businessNumber(), source.ocrText()),
                 approval(input.approvalNumber()),cancellation(source.ocrText()),hashes.get(source.id()));
         for (var existing : all) {
             if (existing.id() >= source.id() || existing.imagePath() == null || "EXCLUDED".equals(existing.duplicateState())) continue;
@@ -148,7 +148,7 @@ public class DuplicateReviewService {
     }
 
     private Evidence evidence(Expense e, String visual) {
-        return new Evidence(e.receiptDate(),e.amount(),merchant(e.vendor()),business(e.ocrText()),approval(e.approvalNumber()),cancellation(e.ocrText()),visual);
+        return new Evidence(e.receiptDate(),e.amount(),merchant(e.vendor()),businessNumber(e.businessNumber(), e.ocrText()),approval(e.approvalNumber()),cancellation(e.ocrText()),visual);
     }
     private String signature(Expense a, Expense b, Map<Long,String> hashes) {
         return hash(evidence(a,hashes.get(a.id())).toString()+"\n"+evidence(b,hashes.get(b.id())));
@@ -194,6 +194,10 @@ public class DuplicateReviewService {
                 .matcher(Objects.toString(text,""));
         while (matcher.find()) ids.add(matcher.group(1)+matcher.group(2)+matcher.group(3));
         return ids.size() == 1 ? ids.iterator().next() : "";
+    }
+    /** 저장된 확인 번호를 우선하며 새 항목이 없는 과거 자료는 기존 원문 비교를 유지합니다. */
+    private static String businessNumber(String number, String original) {
+        return number == null || number.isBlank() ? business(original) : number.replace("-", "");
     }
     private static boolean cancellation(String text) {
         return Objects.toString(text,"").lines().map(s -> s.replaceAll("\\s","").toUpperCase(Locale.ROOT))

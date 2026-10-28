@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 // rows는 현재 조회 결과입니다. 목록 요청과 사진 작업의 진행 상태를 분리해 중복 동작을 줄입니다.
 let config, rows = [], uploading = false, loadRevision = 0, photoBusy = false;
 // 검토 폼의 입력 ID는 edit-필드명 규칙을 따르며, 서버 ExpenseInput과 같은 이름을 사용합니다.
-const fields = ["receiptDate","vendor","category","description","amount","supplyAmount","vatAmount","paymentMethod","approvalNumber","ownerName","department","note"];
+const fields = ["receiptDate","receiptTime","vendor","businessNumber","category","description","amount","supplyAmount","vatAmount","paymentMethod","approvalNumber","ownerName","department","note","vendorAddress"];
 const money = n => n == null ? "미확인" : new Intl.NumberFormat("ko-KR").format(n);
 // 변경 요청 표시 헤더와 JSON 오류 처리를 한곳에 모읍니다. 이 헤더는 로그인 인증 수단은 아닙니다.
 async function api(path, options = {}) {
@@ -42,8 +42,9 @@ function render() {
     const tr = document.createElement("tr");
     if(state==="SUSPECTED")tr.className="duplicate-suspected-row";
     if(state==="EXCLUDED")tr.className="duplicate-excluded-row";
-    tr.append(cell(expense.receiptDate || "날짜 미확인"));
+    const date = cell(expense.receiptDate || "날짜 미확인"); if(expense.receiptTime){const time=document.createElement("small");time.textContent=expense.receiptTime;date.append(time);} tr.append(date);
     const vendor = cell(expense.vendor || "거래처 미확인"); const description = document.createElement("small"); description.textContent = expense.description || "적요를 입력해 주세요"; vendor.append(description); tr.append(vendor);
+    if(expense.businessNumber){const number=document.createElement("small");number.textContent="사업자번호 "+expense.businessNumber;vendor.append(number);}
     if(expense.pdfHash){const source=document.createElement("small");source.textContent=`PDF · ${expense.pdfPage}/${expense.pdfPageCount}쪽`;source.title=expense.originalName;vendor.append(source);}
     const category = cell(""); const tag = document.createElement("span"); tag.className="category-tag"; tag.textContent=expense.category; category.append(tag); tr.append(category);
     const note = cell(expense.note || "—"); note.title=expense.note;
@@ -140,7 +141,7 @@ $("editor").addEventListener("cancel",e=>{if(photoBusy || BookkeepingUI.isBusy()
 // 회전은 입력 초안을 모두 보존하고, 재인식은 직접 작성한 문맥을 보존하면서 추출 필드만 갱신합니다.
 async function photoAction(action, quarterTurns=0) {
   if(photoBusy)return;
-  if(action==="reanalyze" && !confirm("날짜·거래처·계정과목·금액·결제수단·승인번호를 다시 인식하고 검토 대기로 변경합니다. 직접 작성한 적요·비고·사용자·부서는 유지합니다. 이전 오분류의 ‘도서 구입’ 기본값은 재검토합니다. 진행할까요?"))return;
+  if(action==="reanalyze" && !confirm("날짜·거래 시간·거래처·사업자번호·주소·계정과목·금액·결제수단·승인번호를 다시 인식하고 검토 대기로 변경합니다. 직접 작성한 적요·비고·사용자·부서는 유지합니다. 이전 오분류의 ‘도서 구입’ 기본값은 재검토합니다. 진행할까요?"))return;
   // 저장 전의 입력도 보호합니다. 빈 문맥은 재인식 결과가 제안한 값을 받을 수 있게 제외합니다.
   const preserved=action==="rotate"?fields:["description","note","ownerName","department"];
   const draft=Object.fromEntries(preserved.filter(field=>action==="rotate" || $("edit-"+field).value.trim()!=="").map(field=>[field,$("edit-"+field).value]));

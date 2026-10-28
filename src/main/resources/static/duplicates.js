@@ -12,7 +12,9 @@ const DuplicateUI = (() => {
     const box=node("div",null,"duplicate-evidence");
     box.append(node("strong",title),node("p",`#${expense.id} · ${label(expense)} · ${expense.originalName||"직접 입력"}`),
       node("p",`${expense.receiptDate||"날짜 미확인"} / ${expense.vendor||"거래처 미확인"} / ${money(expense.amount)}원`),
-      node("p",`승인번호: ${expense.approvalNumber||"없음·미확인"}`));
+      node("p",`승인번호: ${expense.approvalNumber||"없음·미확인"}`),
+      node("p",`사업자번호: ${expense.businessNumber||"미확인"} / 거래 시간: ${expense.receiptTime||"미확인"}`),
+      node("p",`거래처 주소: ${expense.vendorAddress||"미확인"}`));
     if(expense.imagePath){
       const link=node("a");link.href=`/api/expenses/${expense.id}/image?v=${expense.version}`;link.target="_blank";link.rel="noopener";
       const image=node("img");image.src=link.href;image.alt=`${title} 영수증 원본`;image.loading="lazy";link.append(image);box.append(link);

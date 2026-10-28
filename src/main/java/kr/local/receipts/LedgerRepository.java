@@ -45,7 +45,8 @@ public class LedgerRepository {
                             r.getString("approval_number"),
                             r.getString("pdf_hash"),
                             r.getObject("pdf_page", Integer.class),
-                            r.getObject("pdf_page_count", Integer.class), r.getString("duplicate_state"));
+                            r.getObject("pdf_page_count", Integer.class), r.getString("duplicate_state"),
+                            r.getString("business_number"), r.getString("receipt_time"), r.getString("vendor_address"));
 
     public LedgerRepository(JdbcTemplate db) {
         this.db = db;
@@ -81,8 +82,8 @@ public class LedgerRepository {
             String pdfHash, Integer pdfPage, Integer pdfPageCount) {
         db.update(
                 "INSERT INTO"
-                    + " expenses(receipt_date,vendor,category,description,amount,supply_amount,vat_amount,payment_method,note,analysis_source,analysis_message,ocr_text,image_path,image_hash,original_name,created_at,approval_number,pdf_hash,pdf_page,pdf_page_count)"
-                    + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    + " expenses(receipt_date,vendor,category,description,amount,supply_amount,vat_amount,payment_method,note,analysis_source,analysis_message,ocr_text,image_path,image_hash,original_name,created_at,approval_number,pdf_hash,pdf_page,pdf_page_count,business_number,receipt_time,vendor_address)"
+                    + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 a.date(),
                 a.vendor(),
                 a.category(),
@@ -99,7 +100,7 @@ public class LedgerRepository {
                 hash,
                 name,
                 Instant.now().toString(),
-                a.approvalNumber(), pdfHash, pdfPage, pdfPageCount);
+                a.approvalNumber(), pdfHash, pdfPage, pdfPageCount, a.businessNumber(), a.receiptTime(), a.vendorAddress());
         if (hash != null) return byHash(hash).orElseThrow();
         // 수동 입력은 고유한 임시 이름으로 조회하여 다른 요청의 마지막 삽입 ID와 섞이지 않게 합니다.
         return db.query("SELECT * FROM expenses WHERE original_name=?", MAPPER, name).get(0);
@@ -112,7 +113,7 @@ public class LedgerRepository {
         int count =
                 db.update(
                         "UPDATE expenses SET"
-                            + " receipt_date=?,vendor=?,category=?,description=?,amount=?,supply_amount=?,vat_amount=?,payment_method=?,owner_name=?,department=?,note=?,status=?,approval_number=?,version=version+1"
+                            + " receipt_date=?,vendor=?,category=?,description=?,amount=?,supply_amount=?,vat_amount=?,payment_method=?,owner_name=?,department=?,note=?,status=?,approval_number=?,business_number=?,receipt_time=?,vendor_address=?,version=version+1"
                             + " WHERE id=? AND version=?",
                         x.receiptDate() == null || x.receiptDate().isBlank()
                                 ? null
@@ -129,6 +130,9 @@ public class LedgerRepository {
                         x.note().trim(),
                         x.status(),
                         Objects.toString(x.approvalNumber(), "").trim(),
+                        ReceiptMetadataParser.formatBusinessNumber(Objects.toString(x.businessNumber(), "")),
+                        Objects.toString(x.receiptTime(), ""),
+                        Objects.toString(x.vendorAddress(), "").trim(),
                         id,
                         x.version());
         // 행이 사라진 경우는 404, 존재하지만 버전이 달라진 경우는 409로 구분합니다.
@@ -173,7 +177,7 @@ public class LedgerRepository {
                         "UPDATE expenses SET receipt_date=?,vendor=?,category=?,description=CASE"
                             + " WHEN TRIM(description)='' OR (? AND description='도서 구입') THEN ? ELSE description END,note=CASE"
                             + " WHEN TRIM(note)='' OR (? AND note='도서 구입') THEN ? ELSE note"
-                            + " END,amount=?,supply_amount=?,vat_amount=?,payment_method=?,approval_number=?,analysis_source=?,analysis_message=?,ocr_text=?,status='REVIEW',version=version+1"
+                            + " END,amount=?,supply_amount=?,vat_amount=?,payment_method=?,approval_number=?,business_number=?,receipt_time=?,vendor_address=?,analysis_source=?,analysis_message=?,ocr_text=?,status='REVIEW',version=version+1"
                             + " WHERE id=? AND version=?",
                         a.date(),
                         a.vendor(),
@@ -187,6 +191,7 @@ public class LedgerRepository {
                         a.vat(),
                         a.payment(),
                         a.approvalNumber(),
+                        a.businessNumber(), a.receiptTime(), a.vendorAddress(),
                         a.source(),
                         a.message(),
                         a.text(),

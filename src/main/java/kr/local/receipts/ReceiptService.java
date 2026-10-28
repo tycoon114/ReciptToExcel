@@ -235,6 +235,13 @@ public class ReceiptService {
             } catch (Exception e) {
                 throw bad("날짜를 YYYY-MM-DD 형식으로 입력해 주세요.");
             }
+        // 새 항목은 필수가 아니며, 입력된 경우에만 실제 번호·시각의 유효성을 확인합니다.
+        if (x.businessNumber() != null && !x.businessNumber().isBlank()
+                && !ReceiptMetadataParser.validBusinessNumber(x.businessNumber()))
+            throw bad("사업자등록번호의 자리 수와 검증번호를 확인해 주세요. 미확인은 비워 둘 수 있습니다.");
+        if (x.receiptTime() != null && !x.receiptTime().isBlank()
+                && ReceiptMetadataParser.normalizedTime(x.receiptTime()).isBlank())
+            throw bad("거래 시간은 00:00~23:59 또는 HH:mm:ss 형식으로 입력해 주세요.");
         // 세액을 추정해 채우지 않습니다. 세 항목을 모두 입력한 경우에만 합계의 일치 여부를 검사합니다.
         if (x.amount() != null
                 && x.supplyAmount() != null
@@ -260,7 +267,8 @@ public class ReceiptService {
         if (updated.status().equals("CONFIRMED"))
             try {
                 // 사용자가 확정한 거래처만 기억하며, 사전 저장 실패가 장부 저장 성공을 취소하지는 않습니다.
-                merchants.remember(Objects.toString(updated.ocrText(), ""), updated.vendor());
+                merchants.remember(updated.businessNumber().isBlank()
+                        ? Objects.toString(updated.ocrText(), "") : "사업자번호 " + updated.businessNumber(), updated.vendor());
             } catch (Exception e) {
                 org.slf4j.LoggerFactory.getLogger(ReceiptService.class)
                         .warn("거래처 보정 사전을 저장하지 못했습니다. 장부 저장은 완료되었습니다.");
@@ -353,7 +361,8 @@ public class ReceiptService {
                                                 + " "
                                                 + e.ownerName()
                                                 + " "
-                                                + e.department() + " " + e.approvalNumber())
+                                                + e.department() + " " + e.approvalNumber() + " " + e.businessNumber()
+                                                + " " + e.businessNumber().replace("-", "") + " " + e.vendorAddress())
                                         .toLowerCase(Locale.ROOT)
                                         .contains(q))
                 .sorted(order.thenComparing(Expense::id))

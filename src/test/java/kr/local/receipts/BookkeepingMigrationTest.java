@@ -31,6 +31,8 @@ class BookkeepingMigrationTest {
         assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM receipt_duplicate_matches",Integer.class));
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM receipt_duplicate_lock",Integer.class));
         assertEquals("",db.queryForObject("SELECT approval_number FROM expenses WHERE id=77",String.class));
+        for (String column : java.util.List.of("business_number", "receipt_time", "vendor_address"))
+            assertEquals("",db.queryForObject("SELECT " + column + " FROM expenses WHERE id=77",String.class));
         db.update("UPDATE expenses SET approval_number='00001234' WHERE id=77");
         run(dataSource,script);
         assertEquals("00001234",db.queryForObject("SELECT approval_number FROM expenses WHERE id=77",String.class));
