@@ -22,19 +22,21 @@ public class ApiController {
     private final ExcelExporter excel;
     private final GoogleSheetsSync sheets;
     private final DuplicateReviewService duplicates;
+    private final NtsBusinessLookup nts;
 
     public ApiController(
             LedgerRepository repo,
             ReceiptService service,
             ReceiptAnalyzer analyzer,
             ExcelExporter excel,
-            GoogleSheetsSync sheets, DuplicateReviewService duplicates) {
+            GoogleSheetsSync sheets, DuplicateReviewService duplicates, NtsBusinessLookup nts) {
         this.repo = repo;
         this.service = service;
         this.analyzer = analyzer;
         this.excel = excel;
         this.sheets = sheets;
         this.duplicates = duplicates;
+        this.nts = nts;
     }
 
     /** 화면 선택 목록과 연결 여부를 제공합니다. 서비스 계정 키나 비밀번호는 응답하지 않습니다. */
@@ -52,7 +54,8 @@ public class ApiController {
                 "sheetsConfigured",
                 sheets.configured(),
                 "sheetsUrl",
-                sheets.link());
+                sheets.link(),
+                "ntsConfigured", nts.configured());
     }
 
     /** 월·분류·상태·검색어·정렬 조건을 적용한 장부 목록을 조회합니다. */
@@ -69,6 +72,14 @@ public class ApiController {
     /** 기장 목록에서 연결된 영수증을 다시 열 때 사용하는 단건 조회입니다. */
     @GetMapping("/expenses/{id}")
     public Expense get(@PathVariable long id) { return repo.get(id); }
+
+    public record BusinessLookupInput(@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Min(0) Integer version) {}
+
+    /** 화면이 과세유형을 임의 지정하지 못하도록 저장된 사업자번호를 국세청으로 조회합니다. */
+    @PostMapping("/expenses/{id}/business-status")
+    public Expense businessStatus(@PathVariable long id, @Valid @RequestBody BusinessLookupInput input) {
+        return nts.lookup(id, input.version());
+    }
 
     /** 의심 근거와 비교할 기존 증빙을 조회합니다. 확정 상태나 원본 내용을 변경하지 않습니다. */
     @GetMapping("/expenses/{id}/duplicates")

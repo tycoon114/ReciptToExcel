@@ -44,6 +44,7 @@ function render() {
     if(state==="EXCLUDED")tr.className="duplicate-excluded-row";
     const date = cell(expense.receiptDate || "날짜 미확인"); if(expense.receiptTime){const time=document.createElement("small");time.textContent=expense.receiptTime;date.append(time);} tr.append(date);
     const vendor = cell(expense.vendor || "거래처 미확인"); const description = document.createElement("small"); description.textContent = expense.description || "적요를 입력해 주세요"; vendor.append(description); tr.append(vendor);
+    if(expense.businessLookup){const tax=document.createElement("small");tax.textContent=expense.businessLookup.taxType;vendor.append(tax);}
     if(expense.businessNumber){const number=document.createElement("small");number.textContent="사업자번호 "+expense.businessNumber;vendor.append(number);}
     if(expense.pdfHash){const source=document.createElement("small");source.textContent=`PDF · ${expense.pdfPage}/${expense.pdfPageCount}쪽`;source.title=expense.originalName;vendor.append(source);}
     const category = cell(""); const tag = document.createElement("span"); tag.className="category-tag"; tag.textContent=expense.category; category.append(tag); tr.append(category);
@@ -75,7 +76,7 @@ function openEditor(expense) {
   if(expense.imagePath) { $("receipt-preview").src=`/api/expenses/${expense.id}/image?v=${expense.version}`; $("original-link").href=`/api/expenses/${expense.id}/image?v=${expense.version}`; } else $("receipt-preview").removeAttribute("src");
   $("analysis-source").textContent=expense.analysisSource==="OLLAMA"?"로컬 AI 분석":expense.analysisSource==="OCR_RULES"?"기본 모드 · Windows OCR + 규칙 분류":"직접 입력";
   $("analysis-message").textContent=expense.analysisMessage; $("ocr-text").textContent=expense.ocrText||"인식된 원문이 없습니다."; $("edit-error").hidden=true;
-  DuplicateUI.open(expense);BookkeepingUI.open(expense);
+  DuplicateUI.open(expense);BookkeepingUI.open(expense);NtsUI.open(expense);
   if(!$("editor").open) $("editor").showModal();
 }
 // 사진과 PDF를 순서대로 처리합니다. PDF는 한 페이지를 한 영수증으로 등록하고 페이지별 진행·실패를 표시합니다.
@@ -136,8 +137,8 @@ $("reset-button").addEventListener("click",()=>{$("filters").reset();load().catc
 for(const id of ["filter-month","filter-category","filter-status","filter-sort"]) $(id).addEventListener("change",()=>load().catch(e=>notice(e.message,true)));
 $("refresh-button").addEventListener("click",()=>load().catch(e=>notice(e.message,true)));
 $("manual-button").addEventListener("click",async()=>{try { const expense=await api("/api/expenses",{method:"POST"}); await load(); openEditor(expense); } catch(e) { notice(e.message,true); }});
-document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>{if(!photoBusy && !BookkeepingUI.isBusy() && !DuplicateUI.isBusy())$("editor").close();}));
-$("editor").addEventListener("cancel",e=>{if(photoBusy || BookkeepingUI.isBusy() || DuplicateUI.isBusy())e.preventDefault();});
+document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>{if(!photoBusy && !BookkeepingUI.isBusy() && !DuplicateUI.isBusy() && !NtsUI.isBusy())$("editor").close();}));
+$("editor").addEventListener("cancel",e=>{if(photoBusy || BookkeepingUI.isBusy() || DuplicateUI.isBusy() || NtsUI.isBusy())e.preventDefault();});
 // 회전은 입력 초안을 모두 보존하고, 재인식은 직접 작성한 문맥을 보존하면서 추출 필드만 갱신합니다.
 async function photoAction(action, quarterTurns=0) {
   if(photoBusy)return;
@@ -191,7 +192,7 @@ async function init() {
   try { config=await api("/api/config"); options($("filter-category"),config.categories); options($("edit-category"),config.categories); options($("edit-paymentMethod"),config.payments);
     $("mode-label").textContent=config.aiEnabled?"로컬 AI 연결 모드 · "+config.aiModel:"무료 기본 모드 · OCR + 규칙";
     $("sheets-state").textContent=config.sheetsConfigured?"직접 연결 설정됨":"파일 가져오기"; $("sync-button").textContent=config.sheetsConfigured?"전체 확정 장부 전송 ↗":"연결 및 전송 안내 ↗";
-    await BookkeepingUI.init();await load();
+    NtsUI.init();await BookkeepingUI.init();await load();
   } catch(e) { notice("앱을 불러오지 못했습니다. "+e.message,true); }
 }
 init();

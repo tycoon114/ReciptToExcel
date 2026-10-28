@@ -24,6 +24,8 @@ ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approval_number VARCHAR(40) NOT NU
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS business_number VARCHAR(12) NOT NULL DEFAULT '';
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_time VARCHAR(8) NOT NULL DEFAULT '';
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_address VARCHAR(300) NOT NULL DEFAULT '';
+-- 조회 번호·과세유형·사업자 상태·조회 시점을 함께 저장합니다. 과거 내역은 미조회로 유지합니다.
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS business_lookup_json CLOB;
 
 -- 영수증 지출 전표입니다. 영수증을 확정하는 것과 실제 기장하는 것을 별도로 관리합니다.
 -- 전표의 상호·날짜·계정·금액은 기장 당시의 사본이며, 취소해도 삭제하지 않습니다.
@@ -59,6 +61,7 @@ ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS approval_number VARCHAR
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS business_number VARCHAR(12) NOT NULL DEFAULT '';
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS receipt_time VARCHAR(8) NOT NULL DEFAULT '';
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS vendor_address VARCHAR(300) NOT NULL DEFAULT '';
+ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS business_lookup_json CLOB;
 
 -- PDF 원본은 한 번만 보관하고, 각 영수증은 PDF의 특정 페이지를 가리킵니다.
 CREATE TABLE IF NOT EXISTS pdf_documents (

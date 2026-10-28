@@ -46,7 +46,7 @@ class ReceiptMetadataWorkflowTest {
             assertEquals("13:04:09", ledger.getRow(4).getCell(17).getStringCellValue());
             assertEquals("@", ledger.getRow(4).getCell(16).getCellStyle().getDataFormatString());
             assertEquals("거래처주소", ledger.getRow(3).getCell(ledger.getRow(3).getLastCellNum() - 1).getStringCellValue());
-            assertEquals(address, ledger.getRow(4).getCell(18).getStringCellValue());
+            assertEquals(address, ledger.getRow(4).getCell(ExcelExporter.HEADERS.size()-1).getStringCellValue());
         }
         assertThrows(org.springframework.web.server.ResponseStatusException.class,
                 () -> receipts.save(saved.id(), input(saved, "123-45-67890", "13:04:09", address)));
@@ -63,8 +63,9 @@ class ReceiptMetadataWorkflowTest {
         assertEquals(changed.vendorAddress(), entry.vendorAddress());
         try (var book = new XSSFWorkbook(new ByteArrayInputStream(new BookkeepingExporter().export(List.of(entry))))) {
             var journal = book.getSheet("분개장");
-            assertEquals("거래처주소", journal.getRow(3).getCell(14).getStringCellValue());
-            assertEquals(changed.vendorAddress(), journal.getRow(4).getCell(14).getStringCellValue());
+            int last = journal.getRow(3).getLastCellNum()-1;
+            assertEquals("거래처주소", journal.getRow(3).getCell(last).getStringCellValue());
+            assertEquals(changed.vendorAddress(), journal.getRow(4).getCell(last).getStringCellValue());
         }
     }
 

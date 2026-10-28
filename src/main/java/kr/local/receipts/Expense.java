@@ -32,6 +32,7 @@ package kr.local.receipts;
  * @param businessNumber 거래처 사업자등록번호이며 미확인은 빈 문자열
  * @param receiptTime 영수증에 명시된 거래 시각이며 HH:mm 또는 HH:mm:ss
  * @param vendorAddress 거래처 주소이며 미확인은 빈 문자열
+ * @param businessLookup 국세청 상태조회 사본이며 미조회는 null, 공제·환급 판정값이 아닙니다.
  */
 public record Expense(
         Long id,
@@ -62,4 +63,5 @@ public record Expense(
         String duplicateState,
         String businessNumber,
         String receiptTime,
-        String vendorAddress) {}
+        String vendorAddress,
+        NtsBusinessLookup.Result businessLookup) {}

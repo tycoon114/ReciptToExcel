@@ -21,7 +21,7 @@ public class BookkeepingExporter {
             CellStyle money = book.createCellStyle(); money.setDataFormat(book.createDataFormat().getFormat("#,##0"));
             CellStyle date = book.createCellStyle(); date.setDataFormat(book.createDataFormat().getFormat("yyyy-mm-dd"));
             var journal = sheet(book, "분개장", "기장 완료 전표만 포함 · 취소 전표 제외 · 원 단위 · 경비 지출 기장 보조 자료",
-                    List.of("전표번호","기장일","거래일","영수증ID","거래처","적요","구분","계정과목","차변(원)","대변(원)","기장자","승인번호","사업자등록번호","거래시간","거래처주소"), header);
+                    List.of("전표번호","기장일","거래일","영수증ID","거래처","적요","구분","계정과목","차변(원)","대변(원)","기장자","승인번호","사업자등록번호","거래시간","거래처과세유형","사업자상태","사업자조회일시(UTC)","거래처주소"), header);
             var totals = new TreeMap<String,long[]>();
             int row = 4; long debit = 0, credit = 0;
             for (var entry : entries) {
@@ -31,13 +31,14 @@ public class BookkeepingExporter {
                     write(journal, row++, List.of(entry.entryNumber(), LocalDate.parse(entry.entryDate()),
                             LocalDate.parse(entry.receiptDate()), entry.expenseId(), entry.vendor(), entry.memo(),
                             line.side(), line.account(), dr ? line.amount() : 0L, dr ? 0L : line.amount(), entry.postedBy(), entry.approvalNumber(),
-                            entry.businessNumber(), entry.receiptTime(), entry.vendorAddress()), money, date);
+                            entry.businessNumber(), entry.receiptTime(), NtsBusinessLookup.taxLabel(entry.businessLookup()),
+                            NtsBusinessLookup.stateLabel(entry.businessLookup()), NtsBusinessLookup.checkedAt(entry.businessLookup()), entry.vendorAddress()), money, date);
                     long[] sum = totals.computeIfAbsent(line.account(), ignored -> new long[2]);
                     sum[dr ? 0 : 1] += line.amount();
                     if (dr) debit += line.amount(); else credit += line.amount();
                 }
             }
-            journal.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,14));
+            journal.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,journal.getRow(3).getLastCellNum()-1));
             write(journal, row+1, List.of("합계","","","","","","","",debit,credit,"",""), money, date);
             var accounts = sheet(book, "계정별발생", "활성 전표의 차변·대변 발생 합계 · 기초 잔액·매출·결산 미포함 · 잔액이나 재무제표가 아닙니다.",
                     List.of("계정과목","차변 발생액(원)","대변 발생액(원)"), header);
@@ -46,13 +47,14 @@ public class BookkeepingExporter {
             accounts.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,2));
             write(accounts,row+1,List.of("합계",debit,credit),money,date);
             var cancelled = sheet(book, "기장취소이력", "취소 전표 원본을 보존한 검토 자료 · 분개장과 발생 합계에서는 제외됩니다.",
-                    List.of("전표번호","기장일","영수증ID","거래처","적요","원전표 금액(원)","기장자","취소자","취소시각(UTC)","취소사유","승인번호","사업자등록번호","거래시간","거래처주소"),header);
+                    List.of("전표번호","기장일","영수증ID","거래처","적요","원전표 금액(원)","기장자","취소자","취소시각(UTC)","취소사유","승인번호","사업자등록번호","거래시간","거래처과세유형","사업자상태","사업자조회일시(UTC)","거래처주소"),header);
             row = 4;
             for (var entry : entries) if (entry.status().equals("CANCELLED"))
                 write(cancelled,row++,List.of(entry.entryNumber(),LocalDate.parse(entry.entryDate()),entry.expenseId(),entry.vendor(),
                         entry.memo(),entry.totalAmount(),entry.postedBy(),entry.cancelledBy(),entry.cancelledAt(),entry.cancelReason(),entry.approvalNumber(),
-                        entry.businessNumber(),entry.receiptTime(),entry.vendorAddress()),money,date);
-            cancelled.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,13));
+                        entry.businessNumber(),entry.receiptTime(),NtsBusinessLookup.taxLabel(entry.businessLookup()),
+                        NtsBusinessLookup.stateLabel(entry.businessLookup()),NtsBusinessLookup.checkedAt(entry.businessLookup()),entry.vendorAddress()),money,date);
+            cancelled.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,cancelled.getRow(3).getLastCellNum()-1));
             book.write(output);
             return output.toByteArray();
         }

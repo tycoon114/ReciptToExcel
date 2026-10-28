@@ -46,7 +46,8 @@ public class LedgerRepository {
                             r.getString("pdf_hash"),
                             r.getObject("pdf_page", Integer.class),
                             r.getObject("pdf_page_count", Integer.class), r.getString("duplicate_state"),
-                            r.getString("business_number"), r.getString("receipt_time"), r.getString("vendor_address"));
+                            r.getString("business_number"), r.getString("receipt_time"), r.getString("vendor_address"),
+                            NtsBusinessLookup.restored(r.getString("business_lookup_json")));
 
     public LedgerRepository(JdbcTemplate db) {
         this.db = db;
@@ -113,8 +114,10 @@ public class LedgerRepository {
         int count =
                 db.update(
                         "UPDATE expenses SET"
+                            + " business_lookup_json=CASE WHEN REPLACE(business_number,'-','')=? THEN business_lookup_json ELSE NULL END,"
                             + " receipt_date=?,vendor=?,category=?,description=?,amount=?,supply_amount=?,vat_amount=?,payment_method=?,owner_name=?,department=?,note=?,status=?,approval_number=?,business_number=?,receipt_time=?,vendor_address=?,version=version+1"
                             + " WHERE id=? AND version=?",
+                        Objects.toString(x.businessNumber(), "").replace("-", ""),
                         x.receiptDate() == null || x.receiptDate().isBlank()
                                 ? null
                                 : x.receiptDate(),
@@ -174,11 +177,13 @@ public class LedgerRepository {
         requireEditable(id, false);
         int count =
                 db.update(
-                        "UPDATE expenses SET receipt_date=?,vendor=?,category=?,description=CASE"
+                        "UPDATE expenses SET business_lookup_json=CASE WHEN REPLACE(business_number,'-','')=? THEN business_lookup_json ELSE NULL END,"
+                            + " receipt_date=?,vendor=?,category=?,description=CASE"
                             + " WHEN TRIM(description)='' OR (? AND description='도서 구입') THEN ? ELSE description END,note=CASE"
                             + " WHEN TRIM(note)='' OR (? AND note='도서 구입') THEN ? ELSE note"
                             + " END,amount=?,supply_amount=?,vat_amount=?,payment_method=?,approval_number=?,business_number=?,receipt_time=?,vendor_address=?,analysis_source=?,analysis_message=?,ocr_text=?,status='REVIEW',version=version+1"
                             + " WHERE id=? AND version=?",
+                        a.businessNumber().replace("-", ""),
                         a.date(),
                         a.vendor(),
                         a.category(),
@@ -207,6 +212,20 @@ public class LedgerRepository {
     public Expense lock(long id) {
         return db.query("SELECT * FROM expenses WHERE id=? FOR UPDATE", MAPPER, id).stream()
                 .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "영수증을 찾을 수 없습니다."));
+    }
+
+    /** 조회 대기 중 수정·기장되었으면 결과를 버려 다른 번호에 과세유형을 붙이지 않습니다. */
+    @Transactional
+    public Expense saveBusinessLookup(long id, int version, String number, NtsBusinessLookup.Result result) {
+        requireEditable(id, false);
+        if ("EXCLUDED".equals(get(id).duplicateState()))
+            throw ReceiptService.bad("중복 제외된 내역은 조회 결과를 갱신할 수 없습니다.");
+        int count = db.update("UPDATE expenses SET business_lookup_json=?,version=version+1"
+                        + " WHERE id=? AND version=? AND REPLACE(business_number,'-','')=?",
+                NtsBusinessLookup.stored(result), id, version, number);
+        if (count != 1) throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "조회 중 내역이 변경되어 결과를 저장하지 않았습니다. 다시 열고 조회해 주세요.");
+        return get(id);
     }
 
     /** 오래 걸리는 OCR나 이미지 저장 전에 안내합니다. 최종 변경 시에는 행 잠금 후 다시 검사합니다. */

@@ -53,3 +53,6 @@ dialog{border:1px solid #d9e1ed;border-radius:15px;padding:0;color:var(--ink);wi
 .duplicate-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}.duplicate-actions button{font-size:11px}
 .duplicate-exclude{color:#a51b26;border-color:#df8f99;background:#fff1f3}
 @media(max-width:560px){.duplicate-panel{margin:12px;padding:12px}.duplicate-pair{grid-template-columns:1fr}.duplicate-overview{align-items:flex-start;flex-direction:column}}
+
+/* 국세청 결과는 주소와 별도이며 검토 폼 전체 너비를 사용합니다. */
+#nts-panel{grid-column:1 / -1;margin:0;padding:14px}#nts-result{font-weight:700;overflow-wrap:anywhere}#nts-details{overflow-wrap:anywhere}

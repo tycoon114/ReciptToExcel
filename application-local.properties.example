@@ -8,3 +8,7 @@ app.ollama-model=gemma3:4b
 # 문서 전체 주소 대신 문서 ID를 입력합니다. 개인 키 JSON은 secrets 폴더 등에 두고 Git에 올리지 않습니다.
 app.sheets-id=
 app.sheets-credentials=./secrets/service-account.json
+
+# 선택 기능: 공공데이터포털에서 국세청 사업자등록정보 상태조회 활용신청 후 발급받은 키입니다.
+# 실제 키는 application-local.properties에만 입력하고 GitHub·스크린샷에 공개하지 마세요.
+app.nts-service-key=

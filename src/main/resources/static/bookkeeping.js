@@ -64,14 +64,16 @@ const BookkeepingUI = (() => {
   // 화면에서 기장 증빙을 잠그며 서버도 같은 조건을 검사합니다. 취소 이력이 있으면 삭제할 수 없습니다.
   function applyLocks(){
     if(!source)return;
+    const locked=busy || !!window.NtsUI?.isBusy();
     const posted=activeFor(source.id), excluded=source.duplicateState==="EXCLUDED",eligible=source.status==="CONFIRMED" && !excluded && source.duplicateState!=="SUSPECTED";
-    for(const field of fields)el("edit-"+field).disabled=!!posted || excluded || busy;
-    for(const id of ["rotate-left","rotate-right","reanalyze-button"])el(id).disabled=!!posted || excluded || busy;
-    document.querySelectorAll('#edit-form button[type="submit"]').forEach(b=>b.disabled=!!posted || excluded || busy);
-    el("delete-button").disabled=hasHistory(source.id) || busy;
-    for(const id of ["book-date","book-by","book-credit","book-tax","book-memo"])el(id).disabled=!!posted || !eligible || busy;
-    el("book-post").hidden=!!posted;el("book-post").disabled=!eligible || busy;
-    el("book-cancel-panel").hidden=!posted;el("book-cancel").disabled=busy;
+    for(const field of fields)el("edit-"+field).disabled=!!posted || excluded || locked;
+    for(const id of ["rotate-left","rotate-right","reanalyze-button"])el(id).disabled=!!posted || excluded || locked;
+    document.querySelectorAll('#edit-form button[type="submit"]').forEach(b=>b.disabled=!!posted || excluded || locked);
+    el("delete-button").disabled=hasHistory(source.id) || locked;
+    for(const id of ["book-date","book-by","book-credit","book-tax","book-memo"])el(id).disabled=!!posted || !eligible || locked;
+    el("book-post").hidden=!!posted;el("book-post").disabled=!eligible || locked;
+    el("book-cancel-panel").hidden=!posted;el("book-cancel").disabled=locked;
+    window.NtsUI?.applyLocks();
     el("book-entry-badge").textContent=posted?"기장 완료":hasHistory(source.id)?"취소 후 미기장":"미기장";
     el("book-entry-badge").className="badge"+(posted?"":" review");
     el("book-entry-info").textContent=posted
