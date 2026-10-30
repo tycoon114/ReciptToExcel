@@ -56,3 +56,6 @@ dialog{border:1px solid #d9e1ed;border-radius:15px;padding:0;color:var(--ink);wi
 
 /* 국세청 결과는 주소와 별도이며 검토 폼 전체 너비를 사용합니다. */
 #nts-panel{grid-column:1 / -1;margin:0;padding:14px}#nts-result{font-weight:700;overflow-wrap:anywhere}#nts-details{overflow-wrap:anywhere}
+
+/* 부가세 검토 상태는 세무사 확인을 돕는 자동 제안입니다. */
+#vat-review-result{display:inline-block;font-weight:700;padding:6px 10px;border-radius:6px}.vat-CANDIDATE{background:#e3f3ea;color:#14633d}.vat-NON_DEDUCTIBLE{background:#fde8e8;color:#a52222}.vat-NO_VAT,.vat-EXCLUDED{background:#edf1f5;color:#475569}.vat-REVIEW{background:#fff2cd;color:#865500}

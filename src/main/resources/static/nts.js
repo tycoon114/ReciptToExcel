@@ -27,6 +27,10 @@ window.NtsUI=(()=>{
     }
     if(!config?.ntsConfigured)details.push("인증키 설정 후 앱을 다시 시작하면 조회할 수 있습니다.");
     el("nts-details").textContent=details.join(" · ");
+    const review=expense.vatReview;
+    el("vat-review-result").textContent=review?.label||"확인 필요";
+    el("vat-review-result").className="vat-"+(["CANDIDATE","NON_DEDUCTIBLE","NO_VAT","REVIEW","EXCLUDED"].includes(review?.code)?review.code:"REVIEW");
+    el("vat-review-reason").textContent=review?.reason||"새 버전으로 앱을 재시작한 뒤 저장된 내용을 확인하세요.";
     el("nts-error").hidden=true;controls();
   }
   async function lookup(){

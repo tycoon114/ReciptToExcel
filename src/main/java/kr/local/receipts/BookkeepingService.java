@@ -48,7 +48,7 @@ public class BookkeepingService {
             String creditAccount, long totalAmount, long expenseAmount, long vatAmount, String taxMode,
             String postedBy, String postedAt, String status, String cancelledBy, String cancelledAt,
             String cancelReason, String approvalNumber, String businessNumber, String receiptTime, String vendorAddress,
-            NtsBusinessLookup.Result businessLookup) {
+            NtsBusinessLookup.Result businessLookup, VatDeductionReview.Result vatReview) {
         public List<Line> lines() {
             List<Line> result = new ArrayList<>();
             if (expenseAmount > 0) result.add(new Line("차변", debitAccount, expenseAmount));
@@ -75,7 +75,8 @@ public class BookkeepingService {
                         r.getString("posted_at"), r.getString("status"), r.getString("cancelled_by"),
                         r.getString("cancelled_at"), r.getString("cancel_reason"), r.getString("approval_number"),
                         r.getString("business_number"), r.getString("receipt_time"), r.getString("vendor_address"),
-                        NtsBusinessLookup.restored(r.getString("business_lookup_json")))).stream()
+                        NtsBusinessLookup.restored(r.getString("business_lookup_json")),
+                        VatDeductionReview.restored(r.getString("vat_review_json")))).stream()
                 .filter(e -> month == null || month.isBlank() || e.entryDate().startsWith(month))
                 .filter(e -> (e.entryNumber()+" "+e.vendor()+" "+e.memo()+" "+e.debitAccount()+" "+e.creditAccount()+" "+e.approvalNumber())
                         .toLowerCase(Locale.ROOT).contains(search)).toList();
@@ -128,12 +129,13 @@ public class BookkeepingService {
         long selectedVat = vat;
         db.update(connection -> {
             var statement = connection.prepareStatement("INSERT INTO bookkeeping_entries "
-                    + "(entry_number,expense_id,active_expense_id,expense_version,image_path,entry_date,receipt_date,vendor,memo,debit_account,credit_account,total_amount,expense_amount,vat_amount,tax_mode,posted_by,posted_at,approval_number,business_number,receipt_time,vendor_address,business_lookup_json) "
-                    + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", new String[]{"id"});
+                    + "(entry_number,expense_id,active_expense_id,expense_version,image_path,entry_date,receipt_date,vendor,memo,debit_account,credit_account,total_amount,expense_amount,vat_amount,tax_mode,posted_by,posted_at,approval_number,business_number,receipt_time,vendor_address,business_lookup_json,vat_review_json) "
+                    + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", new String[]{"id"});
             Object[] values = {temporaryNumber, expenseId, expenseId, source.version(), source.imagePath(), date, source.receiptDate(),
                     source.vendor(), input.memo().trim(), source.category(), input.creditAccount(), source.amount(),
                     expense, selectedVat, input.taxMode(), input.postedBy().trim(), Instant.now().toString(), source.approvalNumber(),
-                    source.businessNumber(), source.receiptTime(), source.vendorAddress(), NtsBusinessLookup.stored(source.businessLookup())};
+                    source.businessNumber(), source.receiptTime(), source.vendorAddress(), NtsBusinessLookup.stored(source.businessLookup()),
+                    VatDeductionReview.stored(source.vatReview())};
             for (int i=0; i<values.length; i++) statement.setObject(i+1, values[i]);
             return statement;
         }, key);

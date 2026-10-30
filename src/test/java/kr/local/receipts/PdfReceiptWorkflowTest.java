@@ -151,7 +151,7 @@ class PdfReceiptWorkflowTest {
         assertArrayEquals(bytes,request("GET","/api/expenses/"+id+"/pdf",null).body());
         var exported=request("GET","/api/export.xlsx",null);ok(exported);
         try(var workbook=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(exported.body()))){
-            assertTrue(workbook.getSheet("지출장부").getRow(4).getCell(14).getStringCellValue().contains("scan.pdf [1/1쪽]"));
+            assertTrue(workbook.getSheet("지출장부").getRow(4).getCell(ExcelExporter.column("원본파일명")).getStringCellValue().contains("scan.pdf [1/1쪽]"));
         }
     }
 

@@ -183,15 +183,15 @@ class BookkeepingWorkflowTest {
         String query=URLEncoder.encode(source.path("vendor").asText(),java.nio.charset.StandardCharsets.UTF_8);
         var exported=call("GET","/api/bookkeeping/export.xlsx?query="+query,null);ok(exported);
         try(var book=new XSSFWorkbook(new ByteArrayInputStream(exported.body()))){
-            assertEquals(3,book.getNumberOfSheets());var journal=book.getSheet("분개장");
-            assertNotNull(journal);assertEquals(20000,journal.getRow(4).getCell(8).getNumericCellValue());
-            assertEquals(2000,journal.getRow(5).getCell(8).getNumericCellValue());assertEquals(22000,journal.getRow(6).getCell(9).getNumericCellValue());
-            assertEquals(org.apache.poi.ss.usermodel.CellType.STRING,journal.getRow(4).getCell(5).getCellType());
-            assertTrue(journal.getRow(4).getCell(5).getStringCellValue().startsWith("=HYPERLINK"));
-            assertEquals(22000,book.getSheet("기장취소이력").getRow(4).getCell(5).getNumericCellValue());
-            assertEquals("=1+1",book.getSheet("기장취소이력").getRow(4).getCell(9).getStringCellValue());
-            assertEquals("00001234",journal.getRow(4).getCell(11).getStringCellValue());
-            assertEquals("00001234",book.getSheet("기장취소이력").getRow(4).getCell(10).getStringCellValue());
+            assertEquals(4,book.getNumberOfSheets());var journal=book.getSheet("분개장");
+            assertNotNull(journal);assertEquals(20000,journal.getRow(4).getCell(10).getNumericCellValue());
+            assertEquals(2000,journal.getRow(5).getCell(10).getNumericCellValue());assertEquals(22000,journal.getRow(6).getCell(11).getNumericCellValue());
+            assertEquals(org.apache.poi.ss.usermodel.CellType.STRING,journal.getRow(4).getCell(7).getCellType());
+            assertTrue(journal.getRow(4).getCell(7).getStringCellValue().startsWith("=HYPERLINK"));
+            assertEquals(22000,book.getSheet("기장취소이력").getRow(4).getCell(7).getNumericCellValue());
+            assertEquals("=1+1",book.getSheet("기장취소이력").getRow(4).getCell(11).getStringCellValue());
+            assertEquals("00001234",journal.getRow(4).getCell(13).getStringCellValue());
+            assertEquals("00001234",book.getSheet("기장취소이력").getRow(4).getCell(12).getStringCellValue());
         }
         var october=tree(call("GET","/api/bookkeeping/entries?month=2026-10&query="+query,null));assertEquals(1,october.size());
         assertEquals("CANCELLED",october.get(0).path("status").asText());

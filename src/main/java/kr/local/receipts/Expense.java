@@ -64,4 +64,8 @@ public record Expense(
         String businessNumber,
         String receiptTime,
         String vendorAddress,
-        NtsBusinessLookup.Result businessLookup) {}
+        NtsBusinessLookup.Result businessLookup) {
+    /** 저장된 자료에서 계산하는 읽기 전용 제안이며 브라우저 요청으로 확정값을 지정할 수 없습니다. */
+    @com.fasterxml.jackson.annotation.JsonProperty(value = "vatReview", access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public VatDeductionReview.Result vatReview() { return VatDeductionReview.evaluate(this); }
+}

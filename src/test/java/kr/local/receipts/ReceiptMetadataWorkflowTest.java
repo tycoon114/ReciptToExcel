@@ -41,10 +41,10 @@ class ReceiptMetadataWorkflowTest {
 
         try (var book = new XSSFWorkbook(new ByteArrayInputStream(new ExcelExporter().export(List.of(saved), false)))) {
             var ledger = book.getSheet("지출장부");
-            assertEquals("사업자등록번호", ledger.getRow(3).getCell(16).getStringCellValue());
-            assertEquals("123-45-67891", ledger.getRow(4).getCell(16).getStringCellValue());
-            assertEquals("13:04:09", ledger.getRow(4).getCell(17).getStringCellValue());
-            assertEquals("@", ledger.getRow(4).getCell(16).getCellStyle().getDataFormatString());
+            assertEquals("사업자등록번호", ledger.getRow(3).getCell(ExcelExporter.column("사업자등록번호")).getStringCellValue());
+            assertEquals("123-45-67891", ledger.getRow(4).getCell(ExcelExporter.column("사업자등록번호")).getStringCellValue());
+            assertEquals("13:04:09", ledger.getRow(4).getCell(ExcelExporter.column("거래시간")).getStringCellValue());
+            assertEquals("@", ledger.getRow(4).getCell(ExcelExporter.column("사업자등록번호")).getCellStyle().getDataFormatString());
             assertEquals("거래처주소", ledger.getRow(3).getCell(ledger.getRow(3).getLastCellNum() - 1).getStringCellValue());
             assertEquals(address, ledger.getRow(4).getCell(ExcelExporter.HEADERS.size()-1).getStringCellValue());
         }

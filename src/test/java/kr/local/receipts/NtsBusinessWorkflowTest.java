@@ -61,18 +61,21 @@ class NtsBusinessWorkflowTest {
         var config=http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/config")).GET().build(),HttpResponse.BodyHandlers.ofString());
         assertTrue(json.readTree(config.body()).path("ntsConfigured").asBoolean());assertFalse(config.body().contains("test-key-not-real"));
         try(var book=new XSSFWorkbook(new ByteArrayInputStream(new ExcelExporter().export(List.of(saved),false)))){
-            var ledger=book.getSheet("지출장부");assertEquals(RESULT.taxType(),ledger.getRow(4).getCell(18).getStringCellValue());
-            assertEquals(RESULT.businessState(),ledger.getRow(4).getCell(19).getStringCellValue());
-            assertEquals(RESULT.checkedAt(),ledger.getRow(4).getCell(20).getStringCellValue());
+            var ledger=book.getSheet("지출장부");assertEquals(RESULT.taxType(),ledger.getRow(4).getCell(ExcelExporter.column("거래처과세유형")).getStringCellValue());
+            assertEquals(RESULT.businessState(),ledger.getRow(4).getCell(ExcelExporter.column("사업자상태")).getStringCellValue());
+            assertEquals(RESULT.checkedAt(),ledger.getRow(4).getCell(ExcelExporter.column("사업자조회일시(UTC)")).getStringCellValue());
             assertEquals("거래처주소",ledger.getRow(3).getCell(ExcelExporter.HEADERS.size()-1).getStringCellValue());
         }
         var posted=bookkeeping.post(saved.id(),new BookkeepingService.PostInput(saved.version(),"2026-10-28",
                 BookkeepingService.CREDIT_ACCOUNTS.get(0),"TOTAL_EXPENSE","검토자","직원 점심"));
         assertEquals(RESULT,posted.entry().businessLookup());
+        assertNotNull(posted.entry().vatReview());
+        assertEquals(saved.vatReview(),posted.entry().vatReview());
         assertEquals(409,lookup(posted.expense(),true).statusCode());
         bookkeeping.cancel(posted.entry().id(),new BookkeepingService.CancelInput(posted.expense().version(),"검토자","수정"));
         var changed=receipts.save(saved.id(),input(repo.get(saved.id()),"220-81-62517"));
         assertNull(changed.businessLookup());assertEquals(RESULT,bookkeeping.get(posted.entry().id()).businessLookup());
+        assertEquals(posted.entry().vatReview(),bookkeeping.get(posted.entry().id()).vatReview());
     }
 
     @Test void failedAndStaleLookupsKeepPreviousResults()throws Exception{

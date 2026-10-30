@@ -62,6 +62,8 @@ ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS business_number VARCHAR
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS receipt_time VARCHAR(8) NOT NULL DEFAULT '';
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS vendor_address VARCHAR(300) NOT NULL DEFAULT '';
 ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS business_lookup_json CLOB;
+-- 과거 기장 전표의 제안을 현재 규칙으로 다시 쓰지 않도록 기장 당시 검토 결과와 규칙 버전을 보존합니다.
+ALTER TABLE bookkeeping_entries ADD COLUMN IF NOT EXISTS vat_review_json CLOB;
 
 -- PDF 원본은 한 번만 보관하고, 각 영수증은 PDF의 특정 페이지를 가리킵니다.
 CREATE TABLE IF NOT EXISTS pdf_documents (

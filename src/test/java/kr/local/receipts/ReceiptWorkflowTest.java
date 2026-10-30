@@ -130,12 +130,12 @@ class ReceiptWorkflowTest {
         var export = call("GET", "/api/export.xlsx", null, null, false);
         assertEquals(200, export.statusCode());
         try (var book = new XSSFWorkbook(new ByteArrayInputStream(export.body()))) {
-            assertEquals(2, book.getNumberOfSheets());
+            assertEquals(3, book.getNumberOfSheets());
             var ledger = book.getSheet("지출장부");
-            assertEquals(22000, ledger.getRow(4).getCell(5).getNumericCellValue());
+            assertEquals(22000, ledger.getRow(4).getCell(ExcelExporter.column("총금액(원)")).getNumericCellValue());
             assertEquals(
                     org.apache.poi.ss.usermodel.CellType.STRING,
-                    ledger.getRow(4).getCell(11).getCellType(),
+                    ledger.getRow(4).getCell(ExcelExporter.column("비고")).getCellType(),
                     "Receipt text must never become a formula");
             assertEquals(
                     22000,
@@ -145,9 +145,9 @@ class ReceiptWorkflowTest {
                             .getNumericCellValue());
             assertNotNull(ledger.getPaneInformation());
             assertFalse(ledger.getDataValidations().isEmpty());
-            assertEquals("승인번호",ledger.getRow(3).getCell(15).getStringCellValue());
-            assertEquals("00001234",ledger.getRow(4).getCell(15).getStringCellValue());
-            assertEquals("@",ledger.getRow(4).getCell(15).getCellStyle().getDataFormatString());
+            assertEquals("승인번호",ledger.getRow(3).getCell(ExcelExporter.column("승인번호")).getStringCellValue());
+            assertEquals("00001234",ledger.getRow(4).getCell(ExcelExporter.column("승인번호")).getStringCellValue());
+            assertEquals("@",ledger.getRow(4).getCell(ExcelExporter.column("승인번호")).getCellStyle().getDataFormatString());
         }
         x.put("version", 1);
         x.put("status", "REVIEW");

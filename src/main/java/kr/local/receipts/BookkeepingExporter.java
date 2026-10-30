@@ -20,26 +20,29 @@ public class BookkeepingExporter {
             header.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             CellStyle money = book.createCellStyle(); money.setDataFormat(book.createDataFormat().getFormat("#,##0"));
             CellStyle date = book.createCellStyle(); date.setDataFormat(book.createDataFormat().getFormat("yyyy-mm-dd"));
+            var reviewStyles=VatReviewWorkbook.styles(book);
             var journal = sheet(book, "분개장", "기장 완료 전표만 포함 · 취소 전표 제외 · 원 단위 · 경비 지출 기장 보조 자료",
-                    List.of("전표번호","기장일","거래일","영수증ID","거래처","적요","구분","계정과목","차변(원)","대변(원)","기장자","승인번호","사업자등록번호","거래시간","거래처과세유형","사업자상태","사업자조회일시(UTC)","거래처주소"), header);
+                    List.of("전표번호","기장일","거래일","영수증ID","거래처","부가세 공제 검토","공제 검토 사유","적요","구분","계정과목","차변(원)","대변(원)","기장자","승인번호","사업자등록번호","거래시간","거래처과세유형","사업자상태","사업자조회일시(UTC)","거래처주소"), header);
             var totals = new TreeMap<String,long[]>();
             int row = 4; long debit = 0, credit = 0;
             for (var entry : entries) {
                 if (!entry.status().equals("POSTED")) continue;
+                var review=VatDeductionReview.legacy(entry.vatReview());
                 for (var line : entry.lines()) {
                     boolean dr = line.side().equals("차변");
                     write(journal, row++, List.of(entry.entryNumber(), LocalDate.parse(entry.entryDate()),
-                            LocalDate.parse(entry.receiptDate()), entry.expenseId(), entry.vendor(), entry.memo(),
+                            LocalDate.parse(entry.receiptDate()), entry.expenseId(), entry.vendor(), review.label(), review.reason(), entry.memo(),
                             line.side(), line.account(), dr ? line.amount() : 0L, dr ? 0L : line.amount(), entry.postedBy(), entry.approvalNumber(),
                             entry.businessNumber(), entry.receiptTime(), NtsBusinessLookup.taxLabel(entry.businessLookup()),
                             NtsBusinessLookup.stateLabel(entry.businessLookup()), NtsBusinessLookup.checkedAt(entry.businessLookup()), entry.vendorAddress()), money, date);
+                    journal.getRow(row-1).getCell(5).setCellStyle(reviewStyles.get(review.code()));
                     long[] sum = totals.computeIfAbsent(line.account(), ignored -> new long[2]);
                     sum[dr ? 0 : 1] += line.amount();
                     if (dr) debit += line.amount(); else credit += line.amount();
                 }
             }
             journal.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,journal.getRow(3).getLastCellNum()-1));
-            write(journal, row+1, List.of("합계","","","","","","","",debit,credit,"",""), money, date);
+            write(journal, row+1, List.of("합계","","","","","","","","","",debit,credit,"",""), money, date);
             var accounts = sheet(book, "계정별발생", "활성 전표의 차변·대변 발생 합계 · 기초 잔액·매출·결산 미포함 · 잔액이나 재무제표가 아닙니다.",
                     List.of("계정과목","차변 발생액(원)","대변 발생액(원)"), header);
             row = 4;
@@ -47,14 +50,16 @@ public class BookkeepingExporter {
             accounts.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,2));
             write(accounts,row+1,List.of("합계",debit,credit),money,date);
             var cancelled = sheet(book, "기장취소이력", "취소 전표 원본을 보존한 검토 자료 · 분개장과 발생 합계에서는 제외됩니다.",
-                    List.of("전표번호","기장일","영수증ID","거래처","적요","원전표 금액(원)","기장자","취소자","취소시각(UTC)","취소사유","승인번호","사업자등록번호","거래시간","거래처과세유형","사업자상태","사업자조회일시(UTC)","거래처주소"),header);
+                    List.of("전표번호","기장일","영수증ID","거래처","부가세 공제 검토","공제 검토 사유","적요","원전표 금액(원)","기장자","취소자","취소시각(UTC)","취소사유","승인번호","사업자등록번호","거래시간","거래처과세유형","사업자상태","사업자조회일시(UTC)","거래처주소"),header);
             row = 4;
             for (var entry : entries) if (entry.status().equals("CANCELLED"))
                 write(cancelled,row++,List.of(entry.entryNumber(),LocalDate.parse(entry.entryDate()),entry.expenseId(),entry.vendor(),
+                        VatDeductionReview.legacy(entry.vatReview()).label(),VatDeductionReview.legacy(entry.vatReview()).reason(),
                         entry.memo(),entry.totalAmount(),entry.postedBy(),entry.cancelledBy(),entry.cancelledAt(),entry.cancelReason(),entry.approvalNumber(),
                         entry.businessNumber(),entry.receiptTime(),NtsBusinessLookup.taxLabel(entry.businessLookup()),
                         NtsBusinessLookup.stateLabel(entry.businessLookup()),NtsBusinessLookup.checkedAt(entry.businessLookup()),entry.vendorAddress()),money,date);
             cancelled.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,cancelled.getRow(3).getLastCellNum()-1));
+            VatReviewWorkbook.guide(book);
             book.write(output);
             return output.toByteArray();
         }
@@ -67,7 +72,11 @@ public class BookkeepingExporter {
         var row = sheet.createRow(3);
         for (int i=0;i<headers.size();i++) {
             var cell = row.createCell(i); cell.setCellValue(headers.get(i)); cell.setCellStyle(style);
-            sheet.setColumnWidth(i, (headers.get(i).contains("주소") ? 52 : i==0 || headers.get(i).contains("적요") || headers.get(i).contains("사유") ? 34 : 22)*256);
+            sheet.setColumnWidth(i, (headers.get(i).equals("공제 검토 사유") ? 70 : headers.get(i).contains("주소") ? 52 : i==0 || headers.get(i).contains("적요") || headers.get(i).contains("사유") ? 34 : 22)*256);
+            if(headers.get(i).equals("공제 검토 사유")){
+                var wrap=book.createCellStyle();wrap.setWrapText(true);wrap.setVerticalAlignment(VerticalAlignment.TOP);
+                sheet.setDefaultColumnStyle(i,wrap);
+            }
         }
         sheet.createFreezePane(0,4); sheet.setDisplayGridlines(false);
         sheet.setAutoFilter(new CellRangeAddress(3,3,0,headers.size()-1));
@@ -82,6 +91,9 @@ public class BookkeepingExporter {
             if (value instanceof Number n) { cell.setCellValue(n.doubleValue()); cell.setCellStyle(money); }
             else if (value instanceof LocalDate d) { cell.setCellValue(d.atStartOfDay()); cell.setCellStyle(date); }
             else cell.setCellValue(Objects.toString(value,""));
+            if (sheet.getRow(3).getCell(i).getStringCellValue().equals("공제 검토 사유")) {
+                cell.setCellStyle(sheet.getColumnStyle(i));row.setHeightInPoints(78);
+            }
         }
     }
 }

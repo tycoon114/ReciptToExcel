@@ -18,9 +18,16 @@ public class ExcelExporter {
     // 이 순서를 바꾸면 values의 값 순서, 집계 수식의 열 참조, 구글 전송 범위도 함께 검토해야 합니다.
     public static final List<String> HEADERS =
             List.of(
-                    "관리ID", "지출일자", "거래처", "계정과목", "적요", "총금액(원)", "공급가액(원)", "부가세(원)", "결제수단",
+                    "관리ID", "지출일자", "거래처", "부가세 공제 검토", "공제 검토 사유", "계정과목", "적요", "총금액(원)", "공급가액(원)", "부가세(원)", "결제수단",
                     "사용자", "부서", "비고", "검토상태", "분석방식", "원본파일명", "승인번호",
                     "사업자등록번호", "거래시간", "거래처과세유형", "사업자상태", "사업자조회일시(UTC)", "거래처주소");
+
+    /** 열이 늘어나도 집계·서식·입력 검증이 다른 항목으로 밀리지 않도록 머리글 이름을 기준으로 합니다. */
+    public static int column(String name) {
+        int index=HEADERS.indexOf(name);
+        if(index<0)throw new IllegalArgumentException("알 수 없는 장부 열입니다.");
+        return index;
+    }
 
     /** template이 참이면 200행 입력 양식을, 거짓이면 전달받은 내역의 장부와 집계를 생성합니다. */
     public byte[] export(List<Expense> expenses, boolean template) throws IOException {
@@ -28,6 +35,9 @@ public class ExcelExporter {
                 var out = new ByteArrayOutputStream()) {
             var summary = book.createSheet("계정별집계");
             var ledger = book.createSheet("지출장부");
+            var reviewStyles=VatReviewWorkbook.styles(book);
+            String categoryColumn=CellReference.convertNumToColString(column("계정과목"));
+            String amountColumn=CellReference.convertNumToColString(column("총금액(원)"));
             CellStyle title = style(book, 18, true, "172A46", false),
                     header = style(book, 10, true, "FFFFFF", true),
                     text = style(book, 10, false, "172A46", false);
@@ -45,7 +55,7 @@ public class ExcelExporter {
             CellStyle identifier = book.createCellStyle();
             identifier.cloneStyleFrom(template ? editable : text);
             identifier.setDataFormat(book.createDataFormat().getFormat("@"));
-            for (int c : new int[] {15, 16, 17}) ledger.setDefaultColumnStyle(c, identifier);
+            for (String name : List.of("승인번호","사업자등록번호","거래시간")) ledger.setDefaultColumnStyle(column(name), identifier);
             CellStyle wrap = book.createCellStyle();
             wrap.cloneStyleFrom(text);
             wrap.setWrapText(true);
@@ -56,7 +66,7 @@ public class ExcelExporter {
                     ledger,
                     1,
                     0,
-                    "KRW · "
+                    "KRW · 부가세 공제 검토는 자동 제안이며 세무사 최종 확인 · "
                             + (template
                                     ? "파란 글씨 칸에 입력 · 미확인 세액은 빈칸 · 세액 합계는 입력값만 합산"
                                     : "확정 건 · 조회 조건과 정렬 적용 · 미확인 세액은 빈칸 · 세액 합계는 입력값만 합산"),
@@ -68,15 +78,15 @@ public class ExcelExporter {
             for (int i = 0; i < count; i++) {
                 int r = i + 4;
                 for (int c = 0; c < HEADERS.size(); c++) put(ledger, r, c, "", template ? editable : text);
-                ledger.getRow(r).setHeightInPoints(30);
-                for (int c : new int[] {5, 6, 7}) ledger.getRow(r).getCell(c).setCellStyle(money);
+                ledger.getRow(r).setHeightInPoints(template ? 30 : 78);
+                for (String name : List.of("총금액(원)","공급가액(원)","부가세(원)")) ledger.getRow(r).getCell(column(name)).setCellStyle(money);
                 ledger.getRow(r).getCell(1).setCellStyle(date);
-                ledger.getRow(r).getCell(4).setCellStyle(wrap);
-                ledger.getRow(r).getCell(11).setCellStyle(wrap);
-                for (int c : new int[] {15, 16, 17}) ledger.getRow(r).getCell(c).setCellStyle(identifier);
+                for (String name : List.of("적요","비고","공제 검토 사유")) ledger.getRow(r).getCell(column(name)).setCellStyle(wrap);
+                for (String name : List.of("승인번호","사업자등록번호","거래시간")) ledger.getRow(r).getCell(column(name)).setCellStyle(identifier);
                 ledger.getRow(r).getCell(HEADERS.size() - 1).setCellStyle(wrap);
                 if (i < expenses.size()) {
                     Expense e = expenses.get(i);
+                    ledger.getRow(r).getCell(column("부가세 공제 검토")).setCellStyle(reviewStyles.get(e.vatReview().code()));
                     var values = values(e);
                     for (int c = 0; c < HEADERS.size(); c++) {
                         var cell = ledger.getRow(r).getCell(c);
@@ -91,8 +101,9 @@ public class ExcelExporter {
             }
             // 금액·공급가액·부가세는 입력된 값만 합산하며 미확인 세액을 추정해서 채우지 않습니다.
             int total = count + 5;
-            put(ledger, total, 4, "합계", header);
-            for (int c : new int[] {5, 6, 7}) {
+            put(ledger, total, column("적요"), "합계", header);
+            for (String name : List.of("총금액(원)","공급가액(원)","부가세(원)")) {
+                int c=column(name);
                 var cell = put(ledger, total, c, "", money);
                 cell.setCellFormula(
                         "SUM("
@@ -104,14 +115,14 @@ public class ExcelExporter {
             }
             ledger.setAutoFilter(new CellRangeAddress(3, count + 3, 0, HEADERS.size() - 1));
             ledger.createFreezePane(4, 4);
-            int[] widths = {10, 14, 24, 16, 34, 19, 19, 17, 15, 14, 16, 40, 14, 18, 32, 24, 22, 16, 40, 18, 28, 52};
+            int[] widths = {10, 14, 24, 18, 70, 16, 34, 19, 19, 17, 15, 14, 16, 40, 14, 18, 32, 24, 22, 16, 40, 18, 28, 52};
             for (int c = 0; c < widths.length; c++) ledger.setColumnWidth(c, widths[c] * 256);
             // 빈 양식을 엑셀에서 직접 입력할 때도 앱과 같은 계정과목·결제수단 목록을 사용합니다.
             var validation = ledger.getDataValidationHelper();
             for (var spec :
                     List.of(
-                            Map.entry(3, ReceiptAnalyzer.CATEGORIES),
-                            Map.entry(8, ReceiptAnalyzer.PAYMENTS))) {
+                            Map.entry(column("계정과목"), ReceiptAnalyzer.CATEGORIES),
+                            Map.entry(column("결제수단"), ReceiptAnalyzer.PAYMENTS))) {
                 var constraint =
                         validation.createExplicitListConstraint(
                                 spec.getValue().toArray(String[]::new));
@@ -146,14 +157,14 @@ public class ExcelExporter {
                 put(summary, r, 0, ReceiptAnalyzer.CATEGORIES.get(i), text);
                 put(summary, r, 1, "", money)
                         .setCellFormula(
-                                "COUNTIF('지출장부'!$D$5:$D$" + lastExcel + ",A" + (r + 1) + ")");
+                                "COUNTIF('지출장부'!$"+categoryColumn+"$5:$"+categoryColumn+"$" + lastExcel + ",A" + (r + 1) + ")");
                 put(summary, r, 2, "", money)
                         .setCellFormula(
-                                "SUMIF('지출장부'!$D$5:$D$"
+                                "SUMIF('지출장부'!$"+categoryColumn+"$5:$"+categoryColumn+"$"
                                         + lastExcel
                                         + ",A"
                                         + (r + 1)
-                                        + ",'지출장부'!$F$5:$F$"
+                                        + ",'지출장부'!$"+amountColumn+"$5:$"+amountColumn+"$"
                                         + lastExcel
                                         + ")");
                 summary.getRow(r).setHeightInPoints(26);
@@ -191,6 +202,7 @@ public class ExcelExporter {
                 sheet.getPrintSetup().setFitHeight((short) 0);
             }
             // 열자마자 집계 값이 보이도록 수식 캐시를 계산한 뒤 파일 바이트를 만듭니다.
+            VatReviewWorkbook.guide(book);
             book.getCreationHelper().createFormulaEvaluator().evaluateAll();
             book.write(out);
             return out.toByteArray();
@@ -203,6 +215,7 @@ public class ExcelExporter {
                 e.id(),
                 e.receiptDate(),
                 e.vendor(),
+                e.vatReview().label(), e.vatReview().reason(),
                 e.category(),
                 e.description(),
                 e.amount(),
