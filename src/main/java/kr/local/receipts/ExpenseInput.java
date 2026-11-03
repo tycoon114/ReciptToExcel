@@ -30,7 +30,15 @@ public record ExpenseInput(
         // 새 항목도 선택값입니다. 번호와 시간의 실제 유효성은 서비스에서 검사합니다.
         @Size(max = 12) @Pattern(regexp = "(?:[0-9]{10}|[0-9]{3}-[0-9]{2}-[0-9]{5})?") String businessNumber,
         @Size(max = 8) @Pattern(regexp = "(?:[0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?") String receiptTime,
-        @Size(max = 300) String vendorAddress) {
+        @Size(max = 300) String vendorAddress,
+        @jakarta.validation.Valid TaxInvoice taxInvoice) {
+    /** 기존 클라이언트의 선택 항목 없는 요청도 계속 허용합니다. */
+    public ExpenseInput(String receiptDate,String vendor,String category,String description,Long amount,Long supplyAmount,
+            Long vatAmount,String paymentMethod,String ownerName,String department,String note,String status,int version,
+            String approvalNumber,String businessNumber,String receiptTime,String vendorAddress) {
+        this(receiptDate,vendor,category,description,amount,supplyAmount,vatAmount,paymentMethod,ownerName,department,note,
+                status,version,approvalNumber,businessNumber,receiptTime,vendorAddress,null);
+    }
     /** 기존 요청·내부 호출은 새 선택 항목 없이도 사용할 수 있습니다. */
     public ExpenseInput(String receiptDate, String vendor, String category, String description,
             Long amount, Long supplyAmount, Long vatAmount, String paymentMethod, String ownerName,

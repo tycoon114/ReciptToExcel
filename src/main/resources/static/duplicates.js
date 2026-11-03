@@ -22,7 +22,7 @@ const DuplicateUI = (() => {
     return box;
   }
   function showError(message){el("duplicate-error").textContent=message;el("duplicate-error").hidden=false;}
-  function hasDraft(){return fields.some(field=>{
+  function hasDraft(){return !!window.InvoiceUI?.isDirty() || fields.some(field=>{
     const value=el("edit-"+field).value.trim();
     return ["amount","supplyAmount","vatAmount"].includes(field)?(value===""?null:Number(value))!==(source[field]??null):value!==String(source[field]??"").trim();
   });}

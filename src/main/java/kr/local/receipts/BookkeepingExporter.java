@@ -60,6 +60,8 @@ public class BookkeepingExporter {
                         NtsBusinessLookup.stateLabel(entry.businessLookup()),NtsBusinessLookup.checkedAt(entry.businessLookup()),entry.vendorAddress()),money,date);
             cancelled.setAutoFilter(new CellRangeAddress(3,Math.max(3,row-1),0,cancelled.getRow(3).getLastCellNum()-1));
             VatReviewWorkbook.guide(book);
+            TaxInvoiceWorkbook.add(book,entries.stream().map(e->new TaxInvoiceWorkbook.Source(e.entryNumber(),
+                    "POSTED".equals(e.status())?"기장":"취소 · 집계 제외",e.expenseId(),e.vendor(),e.taxInvoice())).toList());
             book.write(output);
             return output.toByteArray();
         }

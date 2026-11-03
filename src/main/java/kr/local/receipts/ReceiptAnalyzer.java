@@ -49,7 +49,15 @@ public class ReceiptAnalyzer {
             String approvalNumber,
             String businessNumber,
             String receiptTime,
-            String vendorAddress) {
+            String vendorAddress,
+            TaxInvoice taxInvoice) {
+        /** 일반 영수증과 이전 호출은 세금계산서 부가 정보 없이 동작합니다. */
+        public Analysis(String date,String vendor,String category,String description,Long amount,Long supply,Long vat,
+                String payment,String note,String source,String message,String text,String approvalNumber,
+                String businessNumber,String receiptTime,String vendorAddress) {
+            this(date,vendor,category,description,amount,supply,vat,payment,note,source,message,text,approvalNumber,
+                    businessNumber,receiptTime,vendorAddress,null);
+        }
         /** 기존 분석 경로도 동일한 메타정보 추출 규칙을 공유합니다. */
         public Analysis(String date, String vendor, String category, String description, Long amount,
                 Long supply, Long vat, String payment, String note, String source, String message,
@@ -105,13 +113,22 @@ public class ReceiptAnalyzer {
 
     /** 선택한 분석 방식을 실행하고 연결 실패 시에도 사진을 검토할 수 있도록 기본 모드를 사용합니다. */
     public Analysis analyze(Path image, String hint) {
+        return analyze(image,hint,EvidenceKind.AUTO);
+    }
+
+    /** 등록 종류를 유지합니다. 영수증 탭에서는 세금계산서 자동 판별을 실행하지 않습니다. */
+    public Analysis analyze(Path image,String hint,EvidenceKind kind) {
+        if(kind==EvidenceKind.TAX_INVOICE) {
+            var result=ocr.read(image);
+            return TaxInvoiceParser.parseForced(result.text(),hint,result.rows());
+        }
         if (enabled) {
             try {
                 return ai(image, hint);
             } catch (Exception e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
                 var o = ocr.read(image);
-                var a = fromOcr(o, hint);
+                var a = fromOcr(o, hint,kind);
                 return new Analysis(
                         a.date,
                         a.vendor,
@@ -125,11 +142,11 @@ public class ReceiptAnalyzer {
                         a.source,
                         "로컬 AI 연결/분석 실패로 기본 모드를 사용했습니다. Ollama 실행 및 모델 설치를 확인해 주세요. " + a.message(),
                         a.text(),
-                        a.approvalNumber(), a.businessNumber(), a.receiptTime(), a.vendorAddress());
+                        a.approvalNumber(), a.businessNumber(), a.receiptTime(), a.vendorAddress(), a.taxInvoice());
             }
         }
         var o = ocr.read(image);
-        var a = fromOcr(o, hint);
+        var a = fromOcr(o, hint,kind);
         return new Analysis(
                 a.date,
                 a.vendor,
@@ -143,11 +160,18 @@ public class ReceiptAnalyzer {
                 a.source,
                 a.message(),
                 a.text(),
-                a.approvalNumber(), a.businessNumber(), a.receiptTime(), a.vendorAddress());
+                a.approvalNumber(), a.businessNumber(), a.receiptTime(), a.vendorAddress(), a.taxInvoice());
     }
 
     /** OCR 원문을 파싱하고 사업자번호가 일치하는 거래처 보정 결과를 분류에 반영합니다. */
     public Analysis fromText(String text, String hint) {
+        return fromText(text,hint,EvidenceKind.AUTO);
+    }
+
+    public Analysis fromText(String text,String hint,EvidenceKind kind) {
+        if(kind==EvidenceKind.TAX_INVOICE)return TaxInvoiceParser.parseForced(text,hint,List.of());
+        var invoice=kind==EvidenceKind.RECEIPT?null:TaxInvoiceParser.parse(text,hint,List.of());
+        if(invoice!=null)return invoice;
         var a = ReceiptTextParser.parse(text, hint);
         if (merchants == null) return a;
         String vendor = merchants.resolve(a.text(), a.vendor());
@@ -171,10 +195,17 @@ public class ReceiptAnalyzer {
     }
 
     /** 여러 전처리 OCR 결과를 비교해 근거가 많은 후보를 선택하고 누락된 상호·날짜를 보완합니다. */
-    private Analysis fromOcr(WindowsOcr.Result result, String hint) {
+    private Analysis fromOcr(WindowsOcr.Result result, String hint,EvidenceKind kind) {
+        // 표의 좌우 위치가 있는 원본을 우선합니다. 세금계산서를 일반 영수증 점수로 경쟁시키지 않습니다.
+        var invoice=kind==EvidenceKind.RECEIPT?null:TaxInvoiceParser.parse(result.text(),hint,result.rows());
+        if(invoice!=null)return invoice;
+        for(String alternative:kind==EvidenceKind.RECEIPT?List.<String>of():result.alternatives()) {
+            invoice=TaxInvoiceParser.parse(alternative,hint,List.of());
+            if(invoice!=null)return invoice;
+        }
         java.util.List<Analysis> candidates = new java.util.ArrayList<>();
-        candidates.add(fromText(result.text(), hint));
-        for (String text : result.alternatives()) candidates.add(fromText(text, hint));
+        candidates.add(fromText(result.text(), hint,kind));
+        for (String text : result.alternatives()) candidates.add(fromText(text, hint,kind));
         // 빈칸 개수뿐 아니라 명시된 세액과 총액의 일치 여부도 후보 점수에 반영합니다.
         Analysis best =
                 candidates.stream()

@@ -33,6 +33,7 @@ package kr.local.receipts;
  * @param receiptTime 영수증에 명시된 거래 시각이며 HH:mm 또는 HH:mm:ss
  * @param vendorAddress 거래처 주소이며 미확인은 빈 문자열
  * @param businessLookup 국세청 상태조회 사본이며 미조회는 null, 공제·환급 판정값이 아닙니다.
+ * @param taxInvoice 세금계산서의 공급받는 자·번호·품목이며 일반 영수증은 null입니다.
  */
 public record Expense(
         Long id,
@@ -64,8 +65,24 @@ public record Expense(
         String businessNumber,
         String receiptTime,
         String vendorAddress,
-        NtsBusinessLookup.Result businessLookup) {
+        NtsBusinessLookup.Result businessLookup,
+        TaxInvoice taxInvoice) {
+    /** 기존 내부 호출을 유지하는 호환 생성자입니다. 과거 내역의 세금계산서 정보는 비워 둡니다. */
+    public Expense(Long id,String receiptDate,String vendor,String category,String description,Long amount,
+            Long supplyAmount,Long vatAmount,String paymentMethod,String ownerName,String department,String note,
+            String status,String analysisSource,String analysisMessage,String ocrText,String imagePath,String imageHash,
+            String originalName,String createdAt,int version,String approvalNumber,String pdfHash,Integer pdfPage,
+            Integer pdfPageCount,String duplicateState,String businessNumber,String receiptTime,String vendorAddress,
+            NtsBusinessLookup.Result businessLookup) {
+        this(id,receiptDate,vendor,category,description,amount,supplyAmount,vatAmount,paymentMethod,ownerName,department,
+                note,status,analysisSource,analysisMessage,ocrText,imagePath,imageHash,originalName,createdAt,version,
+                approvalNumber,pdfHash,pdfPage,pdfPageCount,duplicateState,businessNumber,receiptTime,vendorAddress,businessLookup,null);
+    }
     /** 저장된 자료에서 계산하는 읽기 전용 제안이며 브라우저 요청으로 확정값을 지정할 수 없습니다. */
     @com.fasterxml.jackson.annotation.JsonProperty(value = "vatReview", access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
     public VatDeductionReview.Result vatReview() { return VatDeductionReview.evaluate(this); }
+
+    /** 선택한 폼 종류는 세금계산서 부가 정보 존재 여부로 유지하므로 기존 DB를 다시 분류하지 않습니다. */
+    @com.fasterxml.jackson.annotation.JsonProperty(value="documentType",access=com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public String documentType() { return taxInvoice==null?"RECEIPT":"TAX_INVOICE"; }
 }

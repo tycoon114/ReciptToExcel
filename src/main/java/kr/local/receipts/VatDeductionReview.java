@@ -5,7 +5,7 @@ import java.util.*;
 
 /** 영수증 자료에 근거한 매입세액 검토 제안입니다. 신고·환급 결정이나 비용 인정 여부가 아닙니다. */
 public final class VatDeductionReview {
-    public static final String VERSION = "2026-10-29-r2";
+    public static final String VERSION = "2026-11-02";
     public static final String NOTICE = "자동 검토 제안 · 매입자 과세사업 여부·사용 목적·증빙 원본·신고 요건은 세무사 최종 확인 · 환급 확정 아님";
     private static final tools.jackson.databind.ObjectMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
     public record Result(String code, String label, String reason, String rule, String ruleVersion) {}
@@ -22,6 +22,13 @@ public final class VatDeductionReview {
             return review("총금액·공급가액·부가세가 모순됩니다. 인식값부터 확인하세요.", "TAX_CONFLICT");
         if (e.vatAmount() != null && e.vatAmount() == 0)
             return result("NO_VAT", "세액 없음", "입력된 부가세가 0원입니다. 면세·영세 등 거래 유형은 별도 확인. 비용 인정 여부와는 다릅니다.", "ZERO_VAT");
+
+        if(e.taxInvoice()!=null) {
+            String mismatch=TaxInvoice.mismatch(e.taxInvoice(),e.supplyAmount(),e.vatAmount());
+            if(!mismatch.isBlank())return review(mismatch+" 원본과 품목 입력을 확인하세요.","INVOICE_ITEM_CONFLICT");
+            if(!ReceiptMetadataParser.validBusinessNumber(e.taxInvoice().buyerBusinessNumber()))
+                return review("세금계산서 공급받는 자 사업자번호가 미확인입니다. 실제 매입자와 필요적 기재사항을 대조하세요.","INVOICE_BUYER");
+        }
 
         String purpose = (s(e.description()) + " " + s(e.note())).replaceAll("\\s", "");
         String details = purpose + " " + s(e.vendor()).replaceAll("\\s", "");
@@ -90,7 +97,7 @@ public final class VatDeductionReview {
         String original = s(e.ocrText()).replaceAll("\\s", "");
         boolean card = Set.of("법인카드", "개인카드", "카드").contains(s(e.paymentMethod()));
         boolean cashReceipt = original.contains("현금영수증") && original.contains("지출증빙");
-        boolean invoice = s(e.ocrText()).lines().map(String::strip).anyMatch(line -> line.matches("(?:전자)?세금계산서"));
+        boolean invoice = TaxInvoiceParser.isInvoice(e.ocrText());
         if (!card && !cashReceipt && !invoice)
             return review("단순 현금·이체 내역만으로 공제 여부를 정하지 않습니다. 지출증빙용 현금영수증·세금계산서 등 적격 증빙을 확인하세요.", "EVIDENCE_UNKNOWN");
         if (s(e.description()).isBlank() || Set.of("미분류", "기타경비").contains(s(e.category())))

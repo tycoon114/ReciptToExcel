@@ -2,11 +2,11 @@
 window.NtsUI=(()=>{
   let source=null, busy=false;
   const el=id=>document.getElementById(id);
-  const dirty=()=>source && fields.some(field=>{
+  const dirty=()=>source && (!!window.InvoiceUI?.isDirty() || fields.some(field=>{
     const value=el("edit-"+field).value.trim();
     return ["amount","supplyAmount","vatAmount"].includes(field)
       ? (value===""?null:Number(value))!==(source[field]??null) : value!==String(source[field]??"");
-  });
+  }));
   function controls(){
     const button=el("nts-lookup");if(!source)return;
     button.disabled=busy || photoBusy || el("edit-businessNumber").disabled;

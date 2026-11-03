@@ -65,8 +65,9 @@ public class ApiController {
             @RequestParam(defaultValue = "") String category,
             @RequestParam(defaultValue = "") String query,
             @RequestParam(defaultValue = "") String status,
-            @RequestParam(defaultValue = "dateDesc") String sort) {
-        return service.filter(month, category, query, status, sort);
+            @RequestParam(defaultValue = "dateDesc") String sort,
+            @RequestParam(defaultValue="") String documentType) {
+        return service.filter(month, category, query, status, sort,documentType);
     }
 
     /** 기장 목록에서 연결된 영수증을 다시 열 때 사용하는 단건 조회입니다. */
@@ -105,9 +106,10 @@ public class ApiController {
     /** 사진과 업무 목적을 받아 분석한 뒤 검토 대기로 등록합니다. 중복이면 기존 내역을 돌려줍니다. */
     @PostMapping(value = "/receipts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ReceiptService.UploadResult upload(
-            @RequestParam MultipartFile file, @RequestParam(defaultValue = "") String hint)
+            @RequestParam MultipartFile file, @RequestParam(defaultValue = "") String hint,
+            @RequestParam(defaultValue="AUTO") String documentType)
             throws Exception {
-        return service.upload(file, hint);
+        return service.upload(file, hint,documentType);
     }
 
     /** PDF를 검사하고 원본을 준비합니다. 이 단계에서는 장부 내역이 생성되지 않습니다. */
@@ -116,13 +118,16 @@ public class ApiController {
         return service.preparePdf(file);
     }
 
-    public record PdfPageInput(@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max=500) String hint) {}
+    public record PdfPageInput(@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max=500) String hint,
+            @jakarta.validation.constraints.Pattern(regexp="AUTO|RECEIPT|TAX_INVOICE") String documentType) {
+        public PdfPageInput(String hint){this(hint,"AUTO");}
+    }
 
     /** 페이지별 요청으로 진행 상황과 실패 페이지를 구분합니다. PDF 페이지 번호는 1부터 시작합니다. */
     @PostMapping(value="/receipts/pdf/{hash}/pages/{page}", consumes=MediaType.APPLICATION_JSON_VALUE)
     public ReceiptService.UploadResult pdfPage(@PathVariable String hash, @PathVariable int page,
             @Valid @RequestBody PdfPageInput input) throws Exception {
-        return service.uploadPdfPage(hash,page,input.hint());
+        return service.uploadPdfPage(hash,page,input.hint(),input.documentType());
     }
 
     /** 모든 페이지가 실패한 경우에만 준비된 원본을 정리합니다. 성공한 영수증의 원본은 유지됩니다. */
@@ -142,8 +147,8 @@ public class ApiController {
 
     /** 영수증 사진 없이 직접 입력할 빈 검토 내역을 만듭니다. */
     @PostMapping("/expenses")
-    public Expense manual() {
-        return service.manual();
+    public Expense manual(@RequestParam(defaultValue="RECEIPT") String documentType) {
+        return service.manual(documentType);
     }
 
     /** 입력 형식을 검증하고 수정 내용을 저장합니다. 확정에 필요한 업무 검증은 서비스가 수행합니다. */
@@ -195,10 +200,11 @@ public class ApiController {
             @RequestParam(defaultValue = "") String month,
             @RequestParam(defaultValue = "") String category,
             @RequestParam(defaultValue = "") String query,
-            @RequestParam(defaultValue = "dateDesc") String sort)
+            @RequestParam(defaultValue = "dateDesc") String sort,
+            @RequestParam(defaultValue="") String documentType)
             throws Exception {
         return download(
-                excel.export(service.filter(month, category, query, "CONFIRMED", sort), false),
+                excel.export(service.filter(month, category, query, "CONFIRMED", sort,documentType), false),
                 "expense-ledger.xlsx");
     }
 

@@ -60,6 +60,12 @@ public class ReceiptService {
     /** 같은 원본 PDF의 같은 페이지는 회전·재인식·사용자 수정 여부와 무관하게 중복으로 처리합니다. */
     @org.springframework.transaction.annotation.Transactional
     public synchronized UploadResult uploadPdfPage(String pdfHash, int pageNumber, String hint) throws Exception {
+        return uploadPdfPage(pdfHash,pageNumber,hint,"AUTO");
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public synchronized UploadResult uploadPdfPage(String pdfHash,int pageNumber,String hint,String documentType) throws Exception {
+        var kind=EvidenceKind.parse(documentType);
         duplicates.lock();
         if (hint == null || hint.length() > 500) throw bad("업무 목적은 500자 이하로 입력해 주세요.");
         var document = pdfs.get(pdfHash);
@@ -73,7 +79,7 @@ public class ReceiptService {
             var rendered = pdfs.render(pdfHash, pageNumber);
             try { if (!ImageIO.write(rendered, "png", path.toFile())) throw bad("PDF 페이지를 사진으로 저장하지 못했습니다."); }
             finally { rendered.flush(); }
-            var analysis = analyzer.analyze(path, hint);
+            var analysis = analyzePdfOrImage(pdfHash,pageNumber,path,hint,kind);
             String name = document.originalName()+" ["+pageNumber+"/"+document.pageCount()+"쪽]";
             Expense saved = repo.insert(analysis,path.getFileName().toString(),pageHash,name,
                     pdfHash,pageNumber,document.pageCount());
@@ -85,6 +91,16 @@ public class ReceiptService {
     /** 성공한 페이지가 하나라도 있으면 원본을 유지합니다. 실패한 페이지만 재시도할 때 같은 원본을 다시 선택하면 됩니다. */
     public synchronized void finishPdf(String hash) throws Exception { pdfs.removeIfUnused(hash); }
 
+    /** 일반 영수증 경로는 유지하며 세금계산서 PDF의 텍스트층만 먼저 사용합니다. 추출 실패는 OCR로 넘깁니다. */
+    private ReceiptAnalyzer.Analysis analyzePdfOrImage(String hash,Integer page,Path image,String hint,EvidenceKind kind) {
+        if(kind!=EvidenceKind.RECEIPT&&hash!=null&&page!=null)try {
+            var source=pdfs.text(hash,page);
+            var invoice=TaxInvoiceParser.parse(source.text(),hint,source.rows());
+            if(invoice!=null)return invoice;
+        } catch(Exception ignored) { /* PDF 미리보기는 유지하고 기존 OCR 경로로 계속합니다. */ }
+        return analyzer.analyze(image,hint,kind);
+    }
+
     public Path originalPdf(long id) {
         String hash = repo.get(id).pdfHash();
         if (hash == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"PDF로 등록한 영수증이 아닙니다.");
@@ -94,6 +110,12 @@ public class ReceiptService {
     /** 같은 파일이 동시에 등록되는 것을 줄이기 위해 중복 확인부터 저장까지 순서대로 처리합니다. */
     @org.springframework.transaction.annotation.Transactional
     public synchronized UploadResult upload(MultipartFile file, String hint) throws Exception {
+        return upload(file,hint,"AUTO");
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public synchronized UploadResult upload(MultipartFile file,String hint,String documentType) throws Exception {
+        var kind=EvidenceKind.parse(documentType);
         duplicates.lock();
         if (file.isEmpty() || file.getSize() > 10 * 1024 * 1024)
             throw bad("10MB 이하의 JPG 또는 PNG 사진을 선택해 주세요.");
@@ -114,7 +136,7 @@ public class ReceiptService {
             } finally {
                 normalized.flush();
             }
-            var analysis = analyzer.analyze(path, hint);
+            var analysis = analyzer.analyze(path, hint,kind);
             Expense saved =
                     repo.insert(
                             analysis,
@@ -182,8 +204,8 @@ public class ReceiptService {
                 && "도서인쇄비".equals(current.category()) && "도서 구입".equals(current.description())
                 && !ReceiptTextParser.book(Objects.toString(current.ocrText(), ""));
         if (staleBookDefault && "도서 구입".equals(purpose.trim())) purpose = "";
-        var analysis = analyzer.analyze(image(id), purpose);
-        if (analysis.source().equals("OCR_RULES") && analysis.text().isBlank())
+        var analysis = analyzePdfOrImage(current.pdfHash(),current.pdfPage(),image(id),purpose,EvidenceKind.parse(current.documentType()));
+        if (Set.of("OCR_RULES","TAX_INVOICE").contains(analysis.source()) && analysis.text().isBlank())
             throw bad("문자를 다시 읽지 못했습니다. 기존 입력은 유지됩니다. 사진 방향이나 선명도를 확인해 주세요.");
         repo.reanalyze(id, version, analysis, staleBookDefault && !"도서인쇄비".equals(analysis.category()));
         duplicates.refresh(); return repo.get(id);
@@ -198,6 +220,16 @@ public class ReceiptService {
 
     /** 직접 입력 내역은 증빙 파일·해시 없이 고유한 임시 이름으로 식별합니다. */
     public Expense manual() {
+        return manual("RECEIPT");
+    }
+
+    /** 세금계산서 직접 입력도 품목이 비어 있는 전용 폼으로 시작합니다. */
+    public Expense manual(String documentType) {
+        var kind=EvidenceKind.parse(documentType);
+        if(kind==EvidenceKind.TAX_INVOICE)
+            return repo.insert(new ReceiptAnalyzer.Analysis(null,"","미분류","",null,null,null,"미확인","","MANUAL",
+                    "직접 입력한 세금계산서입니다. 원본을 대조해 문서와 품목을 입력하세요.","","","","","",
+                    new TaxInvoice("","","","",List.of())),null,null,"manual-"+UUID.randomUUID());
         return repo.insert(
                 new ReceiptAnalyzer.Analysis(
                         null,
@@ -225,6 +257,11 @@ public class ReceiptService {
         Expense current = repo.get(id);
         checkVersion(current, x.version());
         assertNotExcluded(current);
+        if(x.taxInvoice()!=null && !x.taxInvoice().buyerBusinessNumber().isBlank()
+                && !ReceiptMetadataParser.validBusinessNumber(x.taxInvoice().buyerBusinessNumber()))
+            throw bad("공급받는 자 사업자등록번호를 확인해 주세요.");
+        String itemMismatch=TaxInvoice.mismatch(x.taxInvoice()==null?current.taxInvoice():x.taxInvoice(),x.supplyAmount(),x.vatAmount());
+        if("CONFIRMED".equals(x.status())&&!itemMismatch.isBlank())throw bad(itemMismatch+" 품목과 문서 합계를 원본 대조해 주세요.");
         if (!Set.of("REVIEW", "CONFIRMED").contains(x.status())) throw bad("잘못된 검토 상태입니다.");
         if (!ReceiptAnalyzer.CATEGORIES.contains(x.category())
                 || !ReceiptAnalyzer.PAYMENTS.contains(x.paymentMethod()))
@@ -307,6 +344,12 @@ public class ReceiptService {
     /** 장부 조회·엑셀 출력에서 공통으로 사용하는 필터입니다. 미확인 날짜·금액은 정렬 뒤쪽에 둡니다. */
     public List<Expense> filter(
             String month, String category, String query, String status, String sort) {
+        return filter(month,category,query,status,sort,"");
+    }
+
+    /** 통합 장부의 증빙 종류 필터입니다. 중복 비교는 필터와 무관하게 전체 장부를 사용합니다. */
+    public List<Expense> filter(String month,String category,String query,String status,String sort,String documentType) {
+        var kind=EvidenceKind.parse(documentType);
         if (month != null && !month.isBlank())
             try {
                 java.time.YearMonth.parse(month);
@@ -336,6 +379,7 @@ public class ReceiptService {
                                     Comparator.nullsLast(Comparator.reverseOrder()));
                 };
         return repo.all().stream()
+                .filter(e->kind==EvidenceKind.AUTO||e.documentType().equals(kind.name()))
                 .filter(
                         e ->
                                 month == null

@@ -67,6 +67,7 @@ const BookkeepingUI = (() => {
     const locked=busy || !!window.NtsUI?.isBusy();
     const posted=activeFor(source.id), excluded=source.duplicateState==="EXCLUDED",eligible=source.status==="CONFIRMED" && !excluded && source.duplicateState!=="SUSPECTED";
     for(const field of fields)el("edit-"+field).disabled=!!posted || excluded || locked;
+    window.InvoiceUI?.applyLocks(!!posted || excluded || locked);
     for(const id of ["rotate-left","rotate-right","reanalyze-button"])el(id).disabled=!!posted || excluded || locked;
     document.querySelectorAll('#edit-form button[type="submit"]').forEach(b=>b.disabled=!!posted || excluded || locked);
     el("delete-button").disabled=hasHistory(source.id) || locked;
@@ -100,7 +101,7 @@ const BookkeepingUI = (() => {
   }
 
   function hasUnsavedChanges(){
-    return fields.some(field=>{
+    return !!window.InvoiceUI?.isDirty() || fields.some(field=>{
       const value=el("edit-"+field).value.trim();
       return ["amount","supplyAmount","vatAmount"].includes(field)
         ? (value===""?null:Number(value))!==(source[field]??null):value!==String(source[field]??"").trim();

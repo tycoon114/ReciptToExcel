@@ -22,7 +22,7 @@ import java.security.*;
 import java.time.Instant;
 import java.util.*;
 
-/** PDF 원본 보관과 페이지 렌더링을 담당합니다. 텍스트층 유무와 관계없이 보이는 페이지를 OCR에 전달합니다. */
+/** PDF 원본 보관·페이지 렌더링과 세금계산서 텍스트층 추출을 담당합니다. 스캔은 OCR로 읽습니다. */
 @Service
 public class PdfDocuments {
     public static final int MAX_PAGES = 20;
@@ -88,6 +88,13 @@ public class PdfDocuments {
         Path file = path(hash);
         if (!Files.isRegularFile(file)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "보관된 PDF 파일이 없습니다.");
         return file;
+    }
+
+    /** 이미지 OCR에 앞서 텍스트형 세금계산서의 원래 글자와 열 위치를 읽습니다. */
+    PdfPageText.Page text(String hash,int pageNumber) throws IOException {
+        var document=get(hash);
+        if(pageNumber<1||pageNumber>document.pageCount())throw ReceiptService.bad("PDF 페이지 번호를 확인해 주세요.");
+        try(var pdf=open(original(hash))) {return PdfPageText.read(pdf,pageNumber);}
     }
 
     /** PDF 자체의 회전 정보는 렌더러가 적용합니다. 큰 스캔은 출력 픽셀 수를 제한해 한 장씩 처리합니다. */
