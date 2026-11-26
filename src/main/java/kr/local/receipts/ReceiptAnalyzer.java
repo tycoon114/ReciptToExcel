@@ -260,14 +260,28 @@ public class ReceiptAnalyzer {
             message += " 사업자번호가 인식 방식마다 달라 비웠습니다. 원본을 확인해 주세요.";
         if (time.isBlank() && candidates.stream().anyMatch(a -> !a.receiptTime().isBlank()))
             message += " 거래 시각이 인식 방식마다 달라 비웠습니다. 원본을 확인해 주세요.";
+        Long supply = best.supply(), vat = best.vat();
+        // OCR 후보 선택 후 일반 영수증의 누락 금액만 차액으로 제안한다.
+        boolean separateCharges = candidates.stream().map(Analysis::text)
+                .map(t -> t.replaceAll("\\s", ""))
+                .anyMatch(t -> t.contains("면세") || t.contains("비과세") || t.contains("봉사료"));
+        if (amounts.size() == 1 && best.amount() != null && !separateCharges) {
+            if (supply != null && vat == null) {
+                vat = best.amount() - supply;
+                message += " 부가세 " + vat + "원은 총액에서 공급가액을 뺀 계산값입니다. 원본을 확인해 주세요.";
+            } else if (vat != null && supply == null) {
+                supply = best.amount() - vat;
+                message += " 공급가액 " + supply + "원은 총액에서 부가세를 뺀 계산값입니다. 원본을 확인해 주세요.";
+            }
+        }
         return new Analysis(
                 date,
                 vendor,
                 category,
                 description,
                 best.amount(),
-                best.supply(),
-                best.vat(),
+                supply,
+                vat,
                 best.payment(),
                 best.note().isBlank() ? description : best.note(),
                 best.source(),
