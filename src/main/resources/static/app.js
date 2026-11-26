@@ -5,6 +5,8 @@ const $ = id => document.getElementById(id);
 let config, rows = [], uploading = false, loadRevision = 0, photoBusy = false, editorSaving = false;
 // 검토 폼의 입력 ID는 edit-필드명 규칙을 따르며, 서버 ExpenseInput과 같은 이름을 사용합니다.
 const fields = ["receiptDate","receiptTime","vendor","businessNumber","category","description","amount","supplyAmount","vatAmount","paymentMethod","approvalNumber","ownerName","department","note","vendorAddress"];
+let editorStatus = "REVIEW", editorSnapshot = "";
+const editorValues = () => JSON.stringify(fields.map(field => $("edit-"+field).value.trim()));
 const money = n => n == null ? "미확인" : new Intl.NumberFormat("ko-KR").format(n);
 // 변경 요청 표시 헤더와 JSON 오류 처리를 한곳에 모읍니다. 이 헤더는 로그인 인증 수단은 아닙니다.
 async function api(path, options = {}) {
@@ -77,6 +79,7 @@ function openEditor(expense) {
   $("analysis-source").textContent=expense.analysisSource==="OLLAMA"?"로컬 AI 분석":expense.analysisSource==="TAX_INVOICE"?"세금계산서 · 문서 분석":expense.analysisSource==="OCR_RULES"?"기본 모드 · Windows OCR + 규칙 분류":"직접 입력";
   $("analysis-message").textContent=expense.analysisMessage; $("ocr-text").textContent=expense.ocrText||"인식된 원문이 없습니다."; $("edit-error").hidden=true; $("edit-feedback").textContent="";
   InvoiceUI.open(expense);DuplicateUI.open(expense);BookkeepingUI.open(expense);NtsUI.open(expense);
+  editorStatus=expense.status; editorSnapshot=editorValues();
   if(!$("editor").open) $("editor").showModal();
 }
 // 사진과 PDF를 순서대로 처리합니다. PDF는 한 페이지를 한 영수증으로 등록하고 페이지별 진행·실패를 표시합니다.
@@ -140,6 +143,49 @@ $("refresh-button").addEventListener("click",()=>load().catch(e=>notice(e.messag
 $("manual-button").addEventListener("click",async()=>{try { const expense=await api("/api/expenses?"+new URLSearchParams({documentType:DocumentForms.kind()}),{method:"POST"}); await load(); openEditor(expense); } catch(e) { notice(e.message,true); }});
 document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>{if(!editorSaving && !photoBusy && !BookkeepingUI.isBusy() && !DuplicateUI.isBusy() && !NtsUI.isBusy())$("editor").close();}));
 $("editor").addEventListener("cancel",e=>{if(editorSaving || photoBusy || BookkeepingUI.isBusy() || DuplicateUI.isBusy() || NtsUI.isBusy())e.preventDefault();});
+// 바깥에서 누르고 놓은 경우에만 저장 후 닫아 폼 안의 드래그를 닫기로 오인하지 않습니다.
+function outsideEditor(event) {
+  const dialog=$("editor"), box=dialog.getBoundingClientRect();
+  return event.target===dialog && (event.clientX<box.left || event.clientX>box.right
+      || event.clientY<box.top || event.clientY>box.bottom);
+}
+let editorOutsidePress=false;
+$("editor").addEventListener("pointerdown",event=>{
+  editorOutsidePress=event.button===0 && outsideEditor(event);
+});
+$("editor").addEventListener("pointercancel",()=>{editorOutsidePress=false;});
+$("editor").addEventListener("click",event=>{
+  const close=editorOutsidePress && outsideEditor(event);
+  editorOutsidePress=false;
+  if(close) void saveAndCloseEditor();
+});
+async function saveAndCloseEditor() {
+  if(editorSaving || photoBusy || NtsUI.isBusy() || BookkeepingUI.isBusy() || DuplicateUI.isBusy())return;
+  if(editorValues()===editorSnapshot && !InvoiceUI.isDirty()){$("editor").close();return;}
+  // 검토 대기는 필수 항목이 빈 초안도 허용하고, 숫자 입력 오류는 저장 전에 표시합니다.
+  const badNumber=Array.from($("edit-form").querySelectorAll("input")).find(node=>node.validity.badInput);
+  if(badNumber){badNumber.reportValidity();return;}
+  if(editorStatus==="CONFIRMED" && !$("edit-form").reportValidity())return;
+  editorSaving=true;
+  const controls=Array.from($("editor").querySelectorAll("button,input,select,textarea"));
+  const previous=controls.map(node=>node.disabled);
+  controls.forEach(node=>node.disabled=true);
+  $("edit-error").hidden=true; $("edit-feedback").textContent="저장 중…";
+  try {
+    await saveEditor(editorStatus);
+    $("editor").close();
+    notice("입력 내용을 저장했습니다.");
+    try{await load();}catch(error){notice("저장은 완료했지만 목록을 갱신하지 못했습니다. "+error.message,true);}
+  } catch(error) {
+    $("edit-feedback").textContent="";
+    $("edit-error").textContent=error.message;
+    $("edit-error").hidden=false;
+  } finally {
+    editorSaving=false;
+    controls.forEach((node,index)=>node.disabled=previous[index]);
+    BookkeepingUI.applyLocks(); DuplicateUI.applyLocks();
+  }
+}
 // 회전은 입력 초안을 모두 보존하고, 재인식은 직접 작성한 문맥을 보존하면서 추출 필드만 갱신합니다.
 async function photoAction(action, quarterTurns=0) {
   if(InvoiceUI.isDirty()){notice("수정한 세금계산서 품목을 먼저 저장해 주세요.",true);return;}
