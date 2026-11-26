@@ -2,7 +2,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
 // rows는 현재 조회 결과입니다. 목록 요청과 사진 작업의 진행 상태를 분리해 중복 동작을 줄입니다.
-let config, rows = [], uploading = false, loadRevision = 0, photoBusy = false;
+let config, rows = [], uploading = false, loadRevision = 0, photoBusy = false, editorSaving = false;
 // 검토 폼의 입력 ID는 edit-필드명 규칙을 따르며, 서버 ExpenseInput과 같은 이름을 사용합니다.
 const fields = ["receiptDate","receiptTime","vendor","businessNumber","category","description","amount","supplyAmount","vatAmount","paymentMethod","approvalNumber","ownerName","department","note","vendorAddress"];
 const money = n => n == null ? "미확인" : new Intl.NumberFormat("ko-KR").format(n);
@@ -75,7 +75,7 @@ function openEditor(expense) {
   if(expense.pdfHash){$("pdf-original-link").href=`/api/expenses/${expense.id}/pdf`;$("pdf-original-link").textContent=`원본 PDF 내려받기 · ${expense.pdfPage}/${expense.pdfPageCount}쪽`;}else $("pdf-original-link").removeAttribute("href");
   if(expense.imagePath) { $("receipt-preview").src=`/api/expenses/${expense.id}/image?v=${expense.version}`; $("original-link").href=`/api/expenses/${expense.id}/image?v=${expense.version}`; } else $("receipt-preview").removeAttribute("src");
   $("analysis-source").textContent=expense.analysisSource==="OLLAMA"?"로컬 AI 분석":expense.analysisSource==="TAX_INVOICE"?"세금계산서 · 문서 분석":expense.analysisSource==="OCR_RULES"?"기본 모드 · Windows OCR + 규칙 분류":"직접 입력";
-  $("analysis-message").textContent=expense.analysisMessage; $("ocr-text").textContent=expense.ocrText||"인식된 원문이 없습니다."; $("edit-error").hidden=true;
+  $("analysis-message").textContent=expense.analysisMessage; $("ocr-text").textContent=expense.ocrText||"인식된 원문이 없습니다."; $("edit-error").hidden=true; $("edit-feedback").textContent="";
   InvoiceUI.open(expense);DuplicateUI.open(expense);BookkeepingUI.open(expense);NtsUI.open(expense);
   if(!$("editor").open) $("editor").showModal();
 }
@@ -138,12 +138,12 @@ $("reset-button").addEventListener("click",()=>{$("filters").reset();load().catc
 for(const id of ["filter-documentType","filter-month","filter-category","filter-status","filter-sort"]) $(id).addEventListener("change",()=>load().catch(e=>notice(e.message,true)));
 $("refresh-button").addEventListener("click",()=>load().catch(e=>notice(e.message,true)));
 $("manual-button").addEventListener("click",async()=>{try { const expense=await api("/api/expenses?"+new URLSearchParams({documentType:DocumentForms.kind()}),{method:"POST"}); await load(); openEditor(expense); } catch(e) { notice(e.message,true); }});
-document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>{if(!photoBusy && !BookkeepingUI.isBusy() && !DuplicateUI.isBusy() && !NtsUI.isBusy())$("editor").close();}));
-$("editor").addEventListener("cancel",e=>{if(photoBusy || BookkeepingUI.isBusy() || DuplicateUI.isBusy() || NtsUI.isBusy())e.preventDefault();});
+document.querySelectorAll(".close-editor").forEach(b=>b.addEventListener("click",()=>{if(!editorSaving && !photoBusy && !BookkeepingUI.isBusy() && !DuplicateUI.isBusy() && !NtsUI.isBusy())$("editor").close();}));
+$("editor").addEventListener("cancel",e=>{if(editorSaving || photoBusy || BookkeepingUI.isBusy() || DuplicateUI.isBusy() || NtsUI.isBusy())e.preventDefault();});
 // 회전은 입력 초안을 모두 보존하고, 재인식은 직접 작성한 문맥을 보존하면서 추출 필드만 갱신합니다.
 async function photoAction(action, quarterTurns=0) {
-  if(InvoiceUI.isDirty()){notice("수정한 세금계산서 품목을 먼저 저장한 뒤 다시 열어 주세요.",true);return;}
-  if(photoBusy)return;
+  if(InvoiceUI.isDirty()){notice("수정한 세금계산서 품목을 먼저 저장해 주세요.",true);return;}
+  if(photoBusy || editorSaving)return;
   if(action==="reanalyze" && !confirm("날짜·거래 시간·거래처·사업자번호·주소·계정과목·금액·결제수단·승인번호를 다시 인식하고 검토 대기로 변경합니다. 직접 작성한 적요·비고·사용자·부서는 유지합니다. 이전 오분류의 ‘도서 구입’ 기본값은 재검토합니다. 진행할까요?"))return;
   // 저장 전의 입력도 보호합니다. 빈 문맥은 재인식 결과가 제안한 값을 받을 수 있게 제외합니다.
   const preserved=action==="rotate"?fields:["description","note","ownerName","department"];
@@ -169,15 +169,31 @@ async function photoAction(action, quarterTurns=0) {
 $("rotate-left").addEventListener("click",()=>photoAction("rotate",-1));
 $("rotate-right").addEventListener("click",()=>photoAction("rotate",1));
 $("reanalyze-button").addEventListener("click",()=>photoAction("reanalyze"));
-// 금액 빈칸은 null, 입력한 0은 숫자 0으로 보내 미확인과 0원을 구분합니다. 저장 상태는 누른 버튼으로 결정합니다.
-$("edit-form").addEventListener("submit",async e=>{
-  e.preventDefault(); const data={version:Number($("edit-version").value),status:e.submitter?.value||"REVIEW"};
+// 응답의 최신 버전·공제 검토·조회 사본을 같은 창에 반영합니다. 저장 상태는 호출자가 지정합니다.
+async function saveEditor(status) {
+  const data={version:Number($("edit-version").value),status};
   for(const field of fields) { const value=$("edit-"+field).value.trim(); data[field]=["amount","supplyAmount","vatAmount"].includes(field)?(value===""?null:Number(value)):value; }
   data.taxInvoice=InvoiceUI.value();
-  const buttons=Array.from($("edit-form").querySelectorAll("button")); buttons.forEach(b=>b.disabled=true);
-  try { const saved=await api("/api/expenses/"+$("edit-id").value,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}); $("editor").close(); await load(); notice(data.status==="CONFIRMED"?(saved.taxInvoice?"세금계산서":"영수증")+"를 확정했습니다. 장부와 엑셀 내보내기에 반영됩니다.":saved.duplicateState==="SUSPECTED"?"중복 의심 내역으로 저장했습니다. 원본을 비교한 뒤 판단해 주세요.":"검토 대기로 저장했습니다.",saved.duplicateState==="SUSPECTED"); }
-  catch(error) { $("edit-error").textContent=error.message; $("edit-error").hidden=false; }
-  finally { buttons.forEach(b=>b.disabled=false);BookkeepingUI.applyLocks(); }
+  const saved=await api("/api/expenses/"+$("edit-id").value,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+  openEditor(saved);
+  return saved;
+}
+// 저장해도 검토 창을 닫지 않습니다. 요청 중 입력을 잠가 늦은 응답이 새 입력을 덮어쓰지 않게 합니다.
+$("edit-form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  if(editorSaving || photoBusy || NtsUI.isBusy() || BookkeepingUI.isBusy() || DuplicateUI.isBusy())return;
+  if(!$("edit-form").reportValidity())return;
+  const status=e.submitter?.value||"REVIEW";
+  editorSaving=true;
+  const controls=Array.from($("editor").querySelectorAll("button,input,select,textarea")),previous=controls.map(node=>node.disabled);
+  controls.forEach(node=>node.disabled=true); $("edit-error").hidden=true;$("edit-feedback").textContent="저장 중…";
+  try {
+    const saved=await saveEditor(status);
+    const message=status==="CONFIRMED"?(saved.taxInvoice?"세금계산서":"영수증")+"를 확정했습니다. 장부와 엑셀 내보내기에 반영됩니다.":saved.duplicateState==="SUSPECTED"?"중복 의심 내역으로 저장했습니다. 원본을 비교한 뒤 판단해 주세요.":"검토 대기로 저장했습니다.";
+    $("edit-feedback").textContent=message;notice(message,saved.duplicateState==="SUSPECTED");
+    try{await load();}catch(error){notice("저장은 완료했지만 목록을 갱신하지 못했습니다. "+error.message,true);}
+  } catch(error) { $("edit-feedback").textContent="";$("edit-error").textContent=error.message;$("edit-error").hidden=false; }
+  finally {editorSaving=false;controls.forEach((node,i)=>node.disabled=previous[i]);BookkeepingUI.applyLocks();DuplicateUI.applyLocks();}
 });
 // 삭제는 선택 내역과 증빙 사진을 함께 없애므로 사용자 확인을 받은 뒤 요청합니다.
 $("delete-button").addEventListener("click",async()=>{if(!confirm("이 영수증 내역과 사진을 삭제할까요?"))return;try { await api("/api/expenses/"+$("edit-id").value,{method:"DELETE"}); $("editor").close(); await load(); notice("영수증을 삭제했습니다."); } catch(e) { $("edit-error").textContent=e.message; $("edit-error").hidden=false; }});
@@ -195,7 +211,7 @@ async function init() {
   try { config=await api("/api/config"); options($("filter-category"),config.categories); options($("edit-category"),config.categories); options($("edit-paymentMethod"),config.payments);
     $("mode-label").textContent=config.aiEnabled?"로컬 AI 연결 모드 · "+config.aiModel:"무료 기본 모드 · OCR + 규칙";
     $("sheets-state").textContent=config.sheetsConfigured?"직접 연결 설정됨":"파일 가져오기"; $("sync-button").textContent=config.sheetsConfigured?"전체 확정 장부 전송 ↗":"연결 및 전송 안내 ↗";
-    DocumentForms.init();InvoiceUI.init();NtsUI.init();await BookkeepingUI.init();await load();
+    DocumentForms.init();InvoiceUI.init();NtsUI.init();NtsSettingsUI.init();await BookkeepingUI.init();await load();
   } catch(e) { notice("앱을 불러오지 못했습니다. "+e.message,true); }
 }
 init();

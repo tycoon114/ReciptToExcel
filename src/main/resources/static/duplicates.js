@@ -47,7 +47,7 @@ const DuplicateUI = (() => {
     }catch(error){showError(error.message);}finally{busy=false;BookkeepingUI.applyLocks();applyLocks();}
   }
   function applyLocks(){
-    const locked=busy || photoBusy || uploading || BookkeepingUI.isBusy();
+    const locked=busy || editorSaving || !!window.NtsUI?.isBusy() || photoBusy || uploading || BookkeepingUI.isBusy();
     el("duplicate-panel").querySelectorAll("button").forEach(button=>button.disabled=locked);
     if(source?.duplicateState==="SUSPECTED")document.querySelectorAll('#edit-form button[type="submit"][value="CONFIRMED"]').forEach(b=>b.disabled=true);
     document.querySelectorAll(".close-editor").forEach(button=>button.disabled=locked);

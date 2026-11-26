@@ -16,3 +16,7 @@ application-local.properties
 *.trace.db
 # 서비스 계정 키의 파일명이 달라도 이 패턴에 해당하면 추적하지 않습니다.
 service-account*.json
+
+# 화면에서 저장한 국세청 개인 인증키
+nts-settings.properties
+nts-settings-*.tmp

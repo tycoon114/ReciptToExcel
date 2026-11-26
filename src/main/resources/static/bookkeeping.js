@@ -64,7 +64,7 @@ const BookkeepingUI = (() => {
   // 화면에서 기장 증빙을 잠그며 서버도 같은 조건을 검사합니다. 취소 이력이 있으면 삭제할 수 없습니다.
   function applyLocks(){
     if(!source)return;
-    const locked=busy || !!window.NtsUI?.isBusy();
+    const locked=busy || editorSaving || !!window.NtsUI?.isBusy();
     const posted=activeFor(source.id), excluded=source.duplicateState==="EXCLUDED",eligible=source.status==="CONFIRMED" && !excluded && source.duplicateState!=="SUSPECTED";
     for(const field of fields)el("edit-"+field).disabled=!!posted || excluded || locked;
     window.InvoiceUI?.applyLocks(!!posted || excluded || locked);
@@ -80,7 +80,7 @@ const BookkeepingUI = (() => {
     el("book-entry-info").textContent=posted
       ? `${posted.entryNumber} · ${posted.postedBy} · ${new Date(posted.postedAt).toLocaleString("ko-KR")} · 수정하려면 기장을 취소하세요.`
       : eligible?"영수증 확정과 기장은 별개입니다. 저장된 내역과 상대계정을 확인한 뒤 기장하세요."
-      : "먼저 ‘확정하여 장부에 반영’을 눌러 저장하고, 영수증을 다시 열어 기장하세요.";
+      : "먼저 ‘확정하여 장부에 반영’을 눌러 저장한 뒤 이 창에서 계속 기장하세요.";
     if(excluded || source.duplicateState==="SUSPECTED")el("book-entry-info").textContent="중복 검토를 먼저 마쳐야 확정·기장할 수 있습니다.";
     DuplicateUI.applyLocks();
   }

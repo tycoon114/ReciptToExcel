@@ -66,3 +66,8 @@ dialog{border:1px solid #d9e1ed;border-radius:15px;padding:0;color:var(--ink);wi
 .invoice-group{padding:18px 0;border-top:1px solid var(--line)}.invoice-group:first-child{padding-top:0;border-top:0}.invoice-group h3{font-size:15px;margin:0 0 13px}.invoice-group .form-note{line-height:1.7}.invoice-group .invoice-table{min-width:850px}.invoice-group #invoice-add-row{margin-top:12px}.invoice-editor{width:min(1360px,96vw)}.invoice-editor .editor-grid{grid-template-columns:29% 71%}.invoice-editor .preview-panel{min-width:0}.invoice-editor #edit-form{min-width:0}.invoice-editor .invoice-group #nts-panel{margin-top:12px}.invoice-editor .invoice-table th,.invoice-editor .invoice-table td{padding:8px}.invoice-editor .invoice-table input{min-width:80px}.invoice-editor .invoice-table td:first-child{padding-left:8px}
 @media(max-width:1000px){.invoice-editor .editor-grid{grid-template-columns:1fr}.invoice-editor .preview-panel{border-right:0;border-bottom:1px solid var(--line)}}
 @media(max-width:560px){.document-tabs{width:100%}.document-tabs button{flex:1;padding:10px 12px}.invoice-group{padding:15px 0}}
+
+/* 국세청 설정은 장부 검토와 독립된 작은 모달로 표시합니다. */
+#nts-settings{width:min(560px,94vw);padding:0} .nts-settings-content{padding:24px;line-height:1.7}.nts-settings-content>input{display:block;width:100%;box-sizing:border-box;margin:8px 0}.nts-settings-content>label{display:block;font-weight:600}.nts-settings-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+
+.nts-settings-content .form-note{font-size:12px;color:#66758a}.nts-settings-content hr{margin:22px 0}

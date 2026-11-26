@@ -6,7 +6,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,6 +19,7 @@ public class NtsBusinessLookup {
     private final LedgerRepository repo;
     private final ObjectMapper json;
     private final String key;
+    private NtsKeySettings settings;
     private final URI endpoint;
     private final Clock clock;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4))
@@ -31,8 +31,12 @@ public class NtsBusinessLookup {
             String invoiceAppliedOn, String previousTaxType, String checkedAt) {}
 
     @org.springframework.beans.factory.annotation.Autowired
-    public NtsBusinessLookup(LedgerRepository repo, ObjectMapper json,
-            @Value("${app.nts-service-key:}") String key) {
+    public NtsBusinessLookup(LedgerRepository repo, ObjectMapper json, NtsKeySettings settings) {
+        this(repo, json, settings.key(), ENDPOINT, Clock.systemUTC());
+        this.settings = settings;
+    }
+
+    public NtsBusinessLookup(LedgerRepository repo, ObjectMapper json, String key) {
         this(repo, json, key, ENDPOINT, Clock.systemUTC());
     }
 
@@ -45,7 +49,8 @@ public class NtsBusinessLookup {
         this.endpoint = endpoint; this.clock = clock;
     }
 
-    public boolean configured() { return !key.isBlank(); }
+    private String activeKey() { return settings == null ? key : settings.key(); }
+    public boolean configured() { return !activeKey().isBlank(); }
 
     /** 네트워크 대기 중 DB 잠금을 잡지 않습니다. 저장 시 다시 버전·사업자번호·기장 여부를 확인합니다. */
     public Expense lookup(long id, int version) {
@@ -56,14 +61,17 @@ public class NtsBusinessLookup {
         String number = source.businessNumber().replace("-", "");
         if (!ReceiptMetadataParser.validBusinessNumber(number))
             throw ReceiptService.bad("판매점 사업자등록번호를 원본과 대조하고 먼저 저장해 주세요.");
-        if (!configured()) throw ReceiptService.bad("국세청 인증키가 없습니다. 연결 안내에 따라 개인 설정 파일에 키를 넣고 앱을 재시작해 주세요.");
+        if (!configured()) throw ReceiptService.bad("국세청 인증키가 없습니다. 국세청 연결 설정에서 키를 저장해 주세요.");
         Result result = request(number);
         return repo.saveBusinessLookup(id, version, number, result);
     }
 
     /** 요청에는 사업자번호만 담습니다. 인증키와 외부 응답 본문·요청 URL을 오류 응답이나 로그로 출력하지 않습니다. */
-    Result request(String number) {
-        if (!configured()) throw ReceiptService.bad("국세청 인증키를 설정해 주세요.");
+    Result request(String number) { return request(number, activeKey()); }
+
+    /** 연결 확인은 임시 입력 키로 요청하며 장부와 저장된 키를 변경하지 않습니다. */
+    Result request(String number, String key) {
+        if (key.isBlank()) throw ReceiptService.bad("국세청 인증키를 설정해 주세요.");
         if (!ReceiptMetadataParser.validBusinessNumber(number)) throw ReceiptService.bad("사업자등록번호를 확인해 주세요.");
         try {
             // 포털의 Encoding/Decoding 키를 모두 받아 한 번만 URL 인코딩합니다. + 문자를 공백으로 바꾸지 않습니다.
