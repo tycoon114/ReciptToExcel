@@ -65,6 +65,11 @@ public class ImportCardVat {
         return analysis.list();
     }
 
+    public synchronized List<ImportAnalysis.Document> clearTestReviews() throws IOException {
+        // 테스트 조회 실행과 초기화를 직렬화해 늦게 끝난 조회가 결과를 되살리지 않게 합니다.
+        return analysis.clearTestReviews();
+    }
+
     private Map<String, NtsBusinessLookup.Result> testLookups(List<String> numbers) throws IOException {
         var results = new HashMap<String, NtsBusinessLookup.Result>();
         try (var input = new ClassPathResource("samples/import-nts-test.json").getInputStream()) {

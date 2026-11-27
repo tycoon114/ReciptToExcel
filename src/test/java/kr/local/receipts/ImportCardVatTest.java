@@ -77,6 +77,26 @@ class ImportCardVatTest {
         analysis.analyze(file.id()); assertTrue(analysis.list().get(0).analysis().cardReviews().isEmpty());
     }
 
+    @Test void clearingTestLookupsPreservesOriginalsTransactionsAndLiveReviews() throws Exception {
+        var files = new ImportFiles(json, data.toString()); var analysis = new ImportAnalysis(files, json, data.toString());
+        var file = sample(files); var before = analysis.analyze(file.id());
+        byte[] original = Files.readAllBytes(files.original(file.id()));
+        var service = new ImportCardVat(analysis, new NtsBusinessLookup(null, json, ""), json, clock);
+        var tested = service.review("TEST").get(0).analysis();
+        var first = tested.cardReviews().get(0);
+        var live = new ImportAnalysis.CardReview(first.page(), first.line(), first.sheet(), first.businessNumber(),
+                "LIVE", first.lookup(), first.review(), first.candidateVat(), first.checkedAt(), first.lookupError());
+        var mixed = new ArrayList<>(tested.cardReviews()); mixed.set(0, live);
+        analysis.saveCardReviews(tested, mixed);
+        var cleared = service.clearTestReviews().get(0).analysis();
+        assertEquals(List.of(live), cleared.cardReviews());
+        assertEquals(before.rows(), cleared.rows()); assertEquals(before.analyzedAt(), cleared.analyzedAt());
+        assertArrayEquals(original, Files.readAllBytes(files.original(file.id())));
+        assertEquals(1, files.list().size());
+        assertEquals(List.of(live), new ImportAnalysis(files, json, data.toString()).list().get(0).analysis().cardReviews());
+        assertEquals(List.of(live), service.clearTestReviews().get(0).analysis().cardReviews());
+    }
+
     @Test void liveFailuresNeverPromoteTestResultsAndBatchDeduplicatesNumbers() throws Exception {
         var files = new ImportFiles(json, data.toString()); var analysis = new ImportAnalysis(files, json, data.toString());
         var file = sample(files); analysis.analyze(file.id());

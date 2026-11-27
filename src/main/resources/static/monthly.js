@@ -16,12 +16,14 @@ window.MonthlyResults = (() => {
     el("results-previous").disabled = !valid || monthInput.value === "1900-01";
     el("results-next").disabled = !valid || monthInput.value === "9999-12";
     el("results-test-lookup").disabled=reviewing || !documents.some(sourceDocument=>sourceDocument.file.kind==="CARD_PDF" && sourceDocument.analysis.rows.length>0);
+    el("results-clear-test-lookup").disabled=reviewing || exporting || !documents.some(sourceDocument=>
+      (sourceDocument.analysis.cardReviews || []).some(tax=>tax.mode==="TEST"));
     const monthlyExport=el("results-export-scope").value==="month";
     const hasExportRows=documents.some(sourceDocument=>sourceDocument.file.kind!=="RECEIPT_PHOTO" &&
       sourceDocument.analysis.rows.some(row=>!monthlyExport || (valid && row.date.startsWith(monthInput.value+"-"))));
     el("results-export").disabled=exporting || reviewing || !hasExportRows || (monthlyExport && !valid);
     el("results-export-help").textContent=monthlyExport && !valid?"조회할 월을 선택해 주세요.":!hasExportRows?
-      (monthlyExport?"선택한 월에 내보낼 내역이 없습니다.":"내보낼 추출 내역이 없습니다. 등록 자료를 분석해 주세요."):
+      (monthlyExport?"선택한 월의 내역이 0건이라 엑셀을 만들 수 없습니다.":"추출 내역이 0건이라 엑셀을 만들 수 없습니다. 등록 자료를 분석해 주세요."):
       "일부 자료가 없어도 다운로드할 수 있습니다. 통합내역과 자료별 시트를 함께 저장합니다.";
     renderRegistration(valid);
     const kindRows = kind => documents.filter(sourceDocument=> sourceDocument.file.kind === kind && sourceDocument.analysis.analyzedAt)
@@ -141,6 +143,21 @@ window.MonthlyResults = (() => {
       if(current===revision){el("results-error").textContent=error.message;el("results-error").hidden=false;}
     }finally{reviewing=false;el("results-test-lookup").textContent="테스트 조회 적용";render();await refresh();}
   }
+  async function clearTestLookup(){
+    if(reviewing || el("results-clear-test-lookup").disabled)return;
+    if(!window.confirm("등록 자료 전체의 테스트 조회 결과만 비웁니다.\n엑셀·PDF·사진 원본과 추출 내역, 현재 저장된 실제 조회 결과는 유지됩니다. 계속할까요?"))return;
+    reviewing=true;render();el("results-clear-test-lookup").textContent="테스트 조회 비우는 중…";
+    const current=++revision;
+    try{
+      const result=await api("/api/imports/card-vat/clear-test",{method:"POST"});
+      if(current!==revision)return;
+      documents=result;render();el("results-error").hidden=true;
+    }catch(error){
+      if(current===revision){el("results-error").textContent=error.message;el("results-error").hidden=false;}
+    }finally{
+      reviewing=false;el("results-clear-test-lookup").textContent="테스트 조회 비우기";render();await refresh();
+    }
+  }
   async function exportWorkbook() {
     if (exporting || el("results-export").disabled) return;
     exporting = true; render(); el("results-export").textContent = "엑셀 만드는 중…";
@@ -170,6 +187,7 @@ window.MonthlyResults = (() => {
     setMonth(now.getFullYear(), now.getMonth() + 1);
     monthInput.addEventListener("change", render);
     el("results-test-lookup").addEventListener("click",applyTestLookup);
+    el("results-clear-test-lookup").addEventListener("click",clearTestLookup);
     el("results-export-scope").addEventListener("change", render);
     el("results-export").addEventListener("click", exportWorkbook);
     el("results-previous").addEventListener("click", () => moveMonth(-1));

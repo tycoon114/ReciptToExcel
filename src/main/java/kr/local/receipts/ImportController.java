@@ -31,12 +31,15 @@ public class ImportController {
     @PostMapping("/card-vat") public List<ImportAnalysis.Document> cardVat(@RequestParam(defaultValue = "LIVE") String mode) throws IOException {
         return cardVat.review(mode);
     }
+    @PostMapping("/card-vat/clear-test") public List<ImportAnalysis.Document> clearTestReviews() throws IOException {
+        return cardVat.clearTestReviews();
+    }
     @PostMapping("/{id}/analyze") public ImportAnalysis.Result analyze(@PathVariable String id) throws IOException { return analysis.analyze(id); }
     @GetMapping("/export.xlsx") public ResponseEntity<byte[]> export(@RequestParam(required = false) String month) throws IOException {
         String selected = ImportAnalysis.month(month);
         var documents = analysis.list();
         if (!selected.isEmpty() && !ImportWorkbook.hasTransactions(documents, selected))
-            throw ReceiptService.bad("선택한 월에 내보낼 내역이 없습니다.");
+            throw ReceiptService.bad("선택한 월의 내역이 0건이라 엑셀을 만들 수 없습니다.");
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename("추출내역_" + (selected.isEmpty() ? "전체" : selected) + ".xlsx", StandardCharsets.UTF_8).build().toString())

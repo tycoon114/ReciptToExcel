@@ -121,6 +121,16 @@ public class ImportAnalysis {
         save(new Result(current.id(), current.status(), current.analyzedAt(), current.rows(), current.issues(), reviews));
     }
 
+    public synchronized List<Document> clearTestReviews() throws IOException {
+        for (var document : list()) {
+            var current = document.analysis();
+            var remaining = current.cardReviews().stream().filter(review -> !"TEST".equals(review.mode())).toList();
+            if (remaining.size() != current.cardReviews().size())
+                save(new Result(current.id(), current.status(), current.analyzedAt(), current.rows(), current.issues(), remaining));
+        }
+        return list();
+    }
+
     private void save(Result result) throws IOException {
         Path temporary = Files.createTempFile(root, "analysis-", ".tmp");
         try {
