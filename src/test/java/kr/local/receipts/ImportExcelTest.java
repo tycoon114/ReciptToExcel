@@ -83,7 +83,9 @@ class ImportExcelTest {
             }
         }
         try (var book = new XSSFWorkbook(new ByteArrayInputStream(ImportWorkbook.create(service.list(), "")))) {
-            assertEquals(6, book.getNumberOfSheets()); assertEquals("통합내역", book.getSheetAt(0).getSheetName());
+            assertEquals(8, book.getNumberOfSheets()); assertEquals("부가세 요약", book.getSheetAt(0).getSheetName());
+            assertEquals("카드 부가세 검토", book.getSheetAt(1).getSheetName());
+            assertEquals("통합내역", book.getSheetAt(2).getSheetName());
             assertEquals(12, book.getSheet("통합내역").getLastRowNum());
             assertEquals(4, book.getSheet("카드내역").getLastRowNum());
             assertEquals(4, book.getSheet("계좌입출금").getLastRowNum());
