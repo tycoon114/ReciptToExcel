@@ -34,10 +34,13 @@ public class ImportController {
     @PostMapping("/{id}/analyze") public ImportAnalysis.Result analyze(@PathVariable String id) throws IOException { return analysis.analyze(id); }
     @GetMapping("/export.xlsx") public ResponseEntity<byte[]> export(@RequestParam(required = false) String month) throws IOException {
         String selected = ImportAnalysis.month(month);
+        var documents = analysis.list();
+        if (!selected.isEmpty() && !ImportWorkbook.hasTransactions(documents, selected))
+            throw ReceiptService.bad("선택한 월에 내보낼 내역이 없습니다.");
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename("추출내역_" + (selected.isEmpty() ? "전체" : selected) + ".xlsx", StandardCharsets.UTF_8).build().toString())
-                .body(ImportWorkbook.create(analysis.list(), selected));
+                .body(ImportWorkbook.create(documents, selected));
     }
     @GetMapping("/{id}/original") public ResponseEntity<FileSystemResource> original(@PathVariable String id) throws IOException {
         var entry = files.get(id);

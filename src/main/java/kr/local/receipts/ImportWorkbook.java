@@ -76,7 +76,7 @@ final class ImportWorkbook {
             combined.sort(Comparator.comparing((Object[] row) -> row[0].toString().isEmpty() ? "9999-99-99" : row[0].toString())
                     .thenComparing(row -> row[1].toString()).thenComparing(row -> row[17].toString()));
             write(book, "통합내역", new String[]{"거래일 / 작성일", "자료 종류", "거래처", "총액 / 이용금액", "공급가액", "부가세", "계좌 입금액", "계좌 출금액", "계좌 잔액", "거래 구분", "승인 / 문서번호", "원승인 / 원문서번호", "거래처 사업자번호", "시각", "통화", "적요 / 품목", "추출 확인사항", "원본 파일", "원본 위치", "자료 ID", "과세유형", "조회구분", "조회일시", "부가세 검토", "공제 후보 세액", "검토 사유", "검토 규칙버전"}, combined);
-            write(book, "부가세 요약", new String[]{"항목", "금액 / 건수", "산정 범위 / 안내"}, List.of(
+            var summary = new ArrayList<Object[]>(List.of(
                     new Object[]{"조회 범위", month.isEmpty() ? "등록 자료 전체" : month, "거래일 기준 · 카드 내역만 집계"},
                     new Object[]{"조회 출처", "테스트 " + tested + "건 / 실제 " + live + "건", tested > 0 ? "테스트 응답 포함 · 실제 신고·제출용 금액이 아닙니다." : "실제 조회 여부와 검토 사유를 거래별로 확인하세요."},
                     new Object[]{"카드 거래", cardCount, "월 범위 내 등록 카드 내역 건수"},
@@ -88,6 +88,8 @@ final class ImportWorkbook {
                     new Object[]{"원화 미확인 (건)", unknownCurrency, "금액 집계 제외 · 통화 확인 필요"},
                     new Object[]{"최종 납부 / 환급 예상액", "산정 전", "매출세액·매입 공제 검토·증빙 중복 제거 등을 반영한 최종 계산은 아직 제공하지 않습니다."},
                     new Object[]{"세금계산서", "요약 합산 제외", "카드와 중복 공제를 방지하기 위해 거래 연결·공제 검토 전에는 합산하지 않습니다."}));
+            summary.addAll(registrationRows(documents, month));
+            write(book, "부가세 요약", new String[]{"항목", "금액 / 건수", "산정 범위 / 안내"}, summary);
             vatDetails.sort(Comparator.comparing(row -> Objects.toString(row[0], "")));
             write(book, "카드 부가세 검토", new String[]{"거래일", "거래처", "사업자번호", "과세유형", "이용금액", "원본 부가세", "공제 후보 세액", "부가세 검토", "검토 사유", "조회구분", "통화", "원본 파일", "원본 위치"}, vatDetails);
             book.setSheetOrder("부가세 요약", 0);
@@ -101,6 +103,31 @@ final class ImportWorkbook {
             book.write(out);
             return out.toByteArray();
         }
+    }
+
+    static boolean hasTransactions(List<ImportAnalysis.Document> documents, String month) {
+        return documents.stream().filter(document -> document.file().kind() != ImportFiles.Kind.RECEIPT_PHOTO)
+                .anyMatch(document -> document.analysis().rows().stream().anyMatch(row -> included(row, month)));
+    }
+
+    private static List<Object[]> registrationRows(List<ImportAnalysis.Document> documents, String month) {
+        var values = new ArrayList<Object[]>();
+        values.add(new Object[]{"자료 등록 현황", "등록 자료 없음 ≠ 실제 거래 없음", "파일이 있어도 미분석·날짜 미확인 내역은 선택 월에서 빠질 수 있습니다."});
+        for (var kind : ImportFiles.Kind.values()) {
+            var files = documents.stream().filter(document -> document.file().kind() == kind).toList();
+            long count = files.stream().flatMap(document -> document.analysis().rows().stream()).filter(row -> included(row, month)).count();
+            long selectedFiles = files.stream().filter(document -> document.analysis().rows().stream().anyMatch(row -> included(row, month))).count();
+            long unchecked = files.stream().filter(document -> document.analysis().analyzedAt().isEmpty()
+                    || !document.analysis().status().equals("READY")
+                    || document.analysis().rows().stream().anyMatch(row -> row.date().isEmpty())).count();
+            boolean photo = kind == ImportFiles.Kind.RECEIPT_PHOTO;
+            String state = files.isEmpty() ? "등록 자료 없음" : photo ? "등록됨 · 월 연결 전" : count > 0
+                    ? count + "건 · 해당 파일 " + selectedFiles + "개" : month.isEmpty() ? "추출 내역 없음" : "선택 월 추출 내역 없음";
+            String note = "전체 등록 " + files.size() + "개 · " + (photo ? "선택 자료 · 거래일 연결 전으로 월별 구분하지 않음"
+                    : "거래일·작성일 기준 · 분석 대기·확인 필요 " + unchecked + "개 (전체 등록 기준)");
+            values.add(new Object[]{"자료 현황 · " + label(kind), state, note});
+        }
+        return values;
     }
 
     static boolean included(ImportAnalysis.Transaction row, String month) { return month.isEmpty() || row.date().startsWith(month + "-"); }

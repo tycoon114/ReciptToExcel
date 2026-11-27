@@ -97,9 +97,24 @@ class ImportAnalysisTest {
         var files = files(); var service = new ImportAnalysis(files, json, data.toString());
         var bank = upload(files, ImportFiles.Kind.ACCOUNT_PDF, "02_account_transactions.pdf");
         service.analyze(bank.id());
+        var controller = new ImportController(files, service);
+        assertEquals(200, controller.export("2026-11").getStatusCode().value());
+        assertEquals(200, controller.export(null).getStatusCode().value());
+        var emptyMonth = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> controller.export("2026-10"));
+        assertEquals(400, emptyMonth.getStatusCode().value());
         for (var entry : Map.of("2026-11", 11, "2026-12", 2, "2026-10", 0).entrySet()) {
             try (var book = new XSSFWorkbook(new ByteArrayInputStream(ImportWorkbook.create(service.list(), entry.getKey())))) {
                 assertEquals(entry.getValue(), book.getSheet("계좌입출금").getLastRowNum());
+                var summary = book.getSheet("부가세 요약");
+                boolean missingInvoice = false;
+                for (var row : summary) {
+                    if ("자료 현황 · 세금계산서".equals(row.getCell(0).toString())) {
+                        assertEquals("등록 자료 없음", row.getCell(1).toString());
+                        missingInvoice = true;
+                    }
+                }
+                assertTrue(missingInvoice);
             }
         }
         assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> ImportAnalysis.month("2026-13"));

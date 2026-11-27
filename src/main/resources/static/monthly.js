@@ -16,8 +16,14 @@ window.MonthlyResults = (() => {
     el("results-previous").disabled = !valid || monthInput.value === "1900-01";
     el("results-next").disabled = !valid || monthInput.value === "9999-12";
     el("results-test-lookup").disabled=reviewing || !documents.some(sourceDocument=>sourceDocument.file.kind==="CARD_PDF" && sourceDocument.analysis.rows.length>0);
-    el("results-export").disabled = exporting || reviewing || !documents.some(sourceDocument=> sourceDocument.analysis.analyzedAt)
-      || (el("results-export-scope").value === "month" && !valid);
+    const monthlyExport=el("results-export-scope").value==="month";
+    const hasExportRows=documents.some(sourceDocument=>sourceDocument.file.kind!=="RECEIPT_PHOTO" &&
+      sourceDocument.analysis.rows.some(row=>!monthlyExport || (valid && row.date.startsWith(monthInput.value+"-"))));
+    el("results-export").disabled=exporting || reviewing || !hasExportRows || (monthlyExport && !valid);
+    el("results-export-help").textContent=monthlyExport && !valid?"조회할 월을 선택해 주세요.":!hasExportRows?
+      (monthlyExport?"선택한 월에 내보낼 내역이 없습니다.":"내보낼 추출 내역이 없습니다. 등록 자료를 분석해 주세요."):
+      "일부 자료가 없어도 다운로드할 수 있습니다. 통합내역과 자료별 시트를 함께 저장합니다.";
+    renderRegistration(valid);
     const kindRows = kind => documents.filter(sourceDocument=> sourceDocument.file.kind === kind && sourceDocument.analysis.analyzedAt)
       .flatMap(sourceDocument=> sourceDocument.analysis.rows).filter(row => valid && row.date.startsWith(monthInput.value + "-"));
     function amount(id, kind, key) {
@@ -84,6 +90,26 @@ window.MonthlyResults = (() => {
       ? "등록 자료에서 보고된 추출 오류가 없습니다. 원본과 추출 내용을 확인해 주세요."
       : "자료 가져오기에서 ‘등록 자료 분석’을 실행해 주세요.";
   }
+  function renderRegistration(valid){
+    const body=el("results-registration-rows");body.replaceChildren();
+    for(const [kind,label] of [["CARD_PDF","법인카드"],["ACCOUNT_PDF","계좌 입출금"],["TAX_INVOICE","세금계산서"],["RECEIPT_PHOTO","영수증 사진"]]){
+      const files=documents.filter(sourceDocument=>sourceDocument.file.kind===kind);
+      const selected=files.map(sourceDocument=>({sourceDocument,rows:sourceDocument.analysis.rows.filter(row=>valid && row.date.startsWith(monthInput.value+"-"))}));
+      const count=selected.reduce((sum,item)=>sum+item.rows.length,0);
+      const photo=kind==="RECEIPT_PHOTO";
+      const unassigned=files.filter(sourceDocument=>!sourceDocument.analysis.analyzedAt ||
+        sourceDocument.analysis.status!=="READY" || sourceDocument.analysis.rows.some(row=>!row.date)).length;
+      const state=!files.length?"등록 자료 없음":photo?"등록됨 · 월 연결 전":!valid?"월 선택 필요":count?
+        `${count}건 · 해당 파일 ${selected.filter(item=>item.rows.length).length}개`:"선택 월 추출 내역 없음";
+      const note=photo?"선택 자료 · 전체 등록 수 · 거래일 연결 전":unassigned?
+        `전체 등록 중 분석 대기·확인 필요 ${unassigned}개 · 월 귀속 확인 필요`:"추출된 거래일·작성일 기준";
+      const tr=document.createElement("tr");
+      for(const value of [label,files.length+"개",state,note]){
+        const td=document.createElement("td");td.textContent=value;tr.append(td);
+      }
+      body.append(tr);
+    }
+  }
   async function refresh() {
     if(reviewing)return;
     const current = ++revision;
@@ -122,7 +148,10 @@ window.MonthlyResults = (() => {
       const month = el("results-export-scope").value === "month" ? monthInput.value : "";
       const path="/api/imports/export.xlsx";
       const response = await fetch(path + (month ? "?month=" + encodeURIComponent(month) : ""));
-      if (!response.ok) throw new Error("엑셀 생성에 실패했습니다. 다시 시도해 주세요.");
+      if (!response.ok) {
+        const error=await response.json().catch(()=>({}));
+        throw new Error(error.message || "엑셀 생성에 실패했습니다. 다시 시도해 주세요.");
+      }
       const blob = await response.blob(), url = URL.createObjectURL(blob);
       const link = document.createElement("a"); link.href = url; link.download = "추출내역_" + (month || "전체") + ".xlsx";
       document.body.append(link); link.click(); link.remove();
