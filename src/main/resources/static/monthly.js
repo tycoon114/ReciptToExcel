@@ -15,7 +15,7 @@ window.MonthlyResults = (() => {
     el("results-period").textContent = valid ? `${Number(match[1])}년 ${Number(match[2])}월` : "조회할 월을 선택해 주세요.";
     el("results-previous").disabled = !valid || monthInput.value === "1900-01";
     el("results-next").disabled = !valid || monthInput.value === "9999-12";
-    el("results-test-lookup").disabled=reviewing || !documents.some(sourceDocument=>sourceDocument.file.kind==="CARD_PDF" && sourceDocument.analysis.rows.length>0);
+    el("results-test-lookup").disabled=reviewing || exporting || !valid;
     el("results-clear-test-lookup").disabled=reviewing || exporting || !documents.some(sourceDocument=>
       (sourceDocument.analysis.cardReviews || []).some(tax=>tax.mode==="TEST"));
     const monthlyExport=el("results-export-scope").value==="month";
@@ -131,13 +131,9 @@ window.MonthlyResults = (() => {
     reviewing=true;render();el("results-test-lookup").textContent="테스트 조회 적용 중…";
     const current=++revision;
     try{
-      const result=await api("/api/imports/card-vat?mode=TEST",{method:"POST"});
+      const result=await api("/api/imports/card-vat/test-month?month="+encodeURIComponent(monthInput.value),{method:"POST"});
       if(current!==revision)return;
       documents=result;
-      const months=[...new Set(documents.filter(sourceDocument=>sourceDocument.file.kind==="CARD_PDF")
-        .flatMap(sourceDocument=>sourceDocument.analysis.rows).map(row=>row.date.slice(0,7))
-        .filter(month=>/^\d{4}-\d{2}$/.test(month)))].sort().reverse();
-      if(months.length && !months.includes(monthInput.value))monthInput.value=months[0];
       render();el("results-error").hidden=true;
     }catch(error){
       if(current===revision){el("results-error").textContent=error.message;el("results-error").hidden=false;}
@@ -145,7 +141,7 @@ window.MonthlyResults = (() => {
   }
   async function clearTestLookup(){
     if(reviewing || el("results-clear-test-lookup").disabled)return;
-    if(!window.confirm("등록 자료 전체의 테스트 조회 결과만 비웁니다.\n엑셀·PDF·사진 원본과 추출 내역, 현재 저장된 실제 조회 결과는 유지됩니다. 계속할까요?"))return;
+    if(!window.confirm("직접 생성한 모든 월의 개발 테스트 내역과 테스트 조회 결과를 비웁니다.\n등록한 엑셀·PDF·사진 원본과 추출 내역, 현재 저장된 실제 조회 결과는 유지됩니다. 계속할까요?"))return;
     reviewing=true;render();el("results-clear-test-lookup").textContent="테스트 조회 비우는 중…";
     const current=++revision;
     try{

@@ -45,12 +45,15 @@ public class ImportAnalysis {
     private final ImportFiles files;
     private final ObjectMapper json;
     private final Path root;
+    private final Path testRoot;
 
     public ImportAnalysis(ImportFiles files, ObjectMapper json, @Value("${app.data-dir}") String data) throws IOException {
         this.files = files;
         this.json = json;
         root = Path.of(data).resolve("import-analysis");
         Files.createDirectories(root);
+        testRoot = Path.of(data).resolve("import-generated-tests");
+        Files.createDirectories(testRoot);
     }
 
     public synchronized List<Document> list() throws IOException {
@@ -65,6 +68,10 @@ public class ImportAnalysis {
                 result = new Result(file.id(), photo ? "PHOTO_PENDING" : "PENDING", "", List.of(), List.of());
             }
             documents.add(new Document(file, result));
+        }
+        try (var paths = Files.list(testRoot)) {
+            for (var path : paths.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().toList())
+                documents.addAll(Arrays.asList(json.readValue(Files.readString(path), Document[].class)));
         }
         return List.copyOf(documents);
     }
@@ -122,12 +129,28 @@ public class ImportAnalysis {
     }
 
     public synchronized List<Document> clearTestReviews() throws IOException {
+        // This directory contains only generated test snapshots, never uploaded Excel/PDF originals.
+        try (var paths = Files.list(testRoot)) {
+            for (var path : paths.filter(p -> p.getFileName().toString().endsWith(".json")).toList())
+                Files.deleteIfExists(path);
+        }
         for (var document : list()) {
             var current = document.analysis();
             var remaining = current.cardReviews().stream().filter(review -> !"TEST".equals(review.mode())).toList();
             if (remaining.size() != current.cardReviews().size())
                 save(new Result(current.id(), current.status(), current.analyzedAt(), current.rows(), current.issues(), remaining));
         }
+        return list();
+    }
+
+    public synchronized List<Document> saveTestMonth(String month, List<Document> documents) throws IOException {
+        String selected = month(month);
+        if (selected.isEmpty()) throw ReceiptService.bad("테스트 데이터를 넣을 월을 선택해 주세요.");
+        Path temporary = Files.createTempFile(testRoot, "generated-", ".tmp");
+        try {
+            Files.writeString(temporary, json.writeValueAsString(documents));
+            Files.move(temporary, testRoot.resolve(selected + ".json"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally { Files.deleteIfExists(temporary); }
         return list();
     }
 

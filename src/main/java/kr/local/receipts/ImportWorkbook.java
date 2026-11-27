@@ -112,7 +112,7 @@ final class ImportWorkbook {
 
     private static List<Object[]> registrationRows(List<ImportAnalysis.Document> documents, String month) {
         var values = new ArrayList<Object[]>();
-        values.add(new Object[]{"자료 등록 현황", "등록 자료 없음 ≠ 실제 거래 없음", "파일이 있어도 미분석·날짜 미확인 내역은 선택 월에서 빠질 수 있습니다."});
+        values.add(new Object[]{"자료 등록 현황", "등록 자료 없음 ≠ 실제 거래 없음", "파일이 있어도 미분석·날짜 미확인 내역은 선택 월에서 빠질 수 있습니다. [개발 테스트]는 생성한 가상 내역입니다."});
         for (var kind : ImportFiles.Kind.values()) {
             var files = documents.stream().filter(document -> document.file().kind() == kind).toList();
             long count = files.stream().flatMap(document -> document.analysis().rows().stream()).filter(row -> included(row, month)).count();

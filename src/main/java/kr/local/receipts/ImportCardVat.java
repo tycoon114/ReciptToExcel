@@ -26,6 +26,7 @@ public class ImportCardVat {
     public synchronized List<ImportAnalysis.Document> review(String mode) throws IOException {
         if (!Set.of("LIVE", "TEST").contains(mode)) throw ReceiptService.bad("실제 조회 또는 테스트 조회를 선택해 주세요.");
         var documents = analysis.list().stream().filter(document -> document.file().kind() == ImportFiles.Kind.CARD_PDF
+                && !"application/x-receipt-generated-test".equals(document.file().mediaType())
                 && !document.analysis().rows().isEmpty()).toList();
         if (documents.isEmpty()) throw ReceiptService.bad("먼저 카드 자료를 분석해 주세요.");
         var numbers = documents.stream().flatMap(document -> document.analysis().rows().stream())
@@ -63,6 +64,47 @@ public class ImportCardVat {
             analysis.saveCardReviews(document.analysis(), reviews);
         }
         return analysis.list();
+    }
+
+    public synchronized List<ImportAnalysis.Document> generateTestMonth(String month) throws IOException {
+        String selected = ImportAnalysis.month(month);
+        if (selected.isEmpty()) throw ReceiptService.bad("테스트 데이터를 넣을 월을 선택해 주세요.");
+        String date = selected + "-10", now = Instant.now(clock).toString();
+        var cards = List.of(
+                testRow(1, date, "[개발 테스트] 직원식사", "0000000015", "사용", 61000L, 55455L, 5545L, null, null, "직원 점심 식사"),
+                testRow(2, date, "[개발 테스트] 사무용품", "0000000029", "사용", 110000L, 100000L, 10000L, null, null, "사무용품 구입"),
+                testRow(3, date, "[개발 테스트] 간이과세", "0000000048", "사용", 11000L, 10000L, 1000L, null, null, "직원 회의 커피"),
+                testRow(4, date, "[개발 테스트] 용도미확인", "0000000015", "사용", 33000L, 30000L, 3000L, null, null, ""));
+        var lookups = testLookups(cards.stream().map(row -> row.businessNumber()).distinct().toList());
+        var reviews = new ArrayList<ImportAnalysis.CardReview>();
+        for (var row : cards) {
+            var lookup = lookups.get(row.businessNumber()); var review = evaluate(row, lookup, "");
+            reviews.add(new ImportAnalysis.CardReview(row.page(), row.line(), row.sheet(), row.businessNumber(), "TEST", lookup,
+                    review, "CANDIDATE".equals(review.code()) ? row.vat() : null, now, ""));
+        }
+        var accounts = List.of(
+                testRow(1, date, "[개발 테스트] 입금", "", "입금", null, null, null, 330000L, null, "개발 테스트 입금"),
+                testRow(2, date, "[개발 테스트] 계좌지급", "", "출금", null, null, null, null, 61000L, "개발 테스트 출금"));
+        var invoices = List.of(testRow(1, date, "[개발 테스트] 매입서비스", "0000000034", "매입",
+                55000L, 50000L, 5000L, null, null, "개발 테스트 세금계산서"));
+        return analysis.saveTestMonth(selected, List.of(
+                testDocument(selected, ImportFiles.Kind.CARD_PDF, now, cards, reviews),
+                testDocument(selected, ImportFiles.Kind.ACCOUNT_PDF, now, accounts, List.of()),
+                testDocument(selected, ImportFiles.Kind.TAX_INVOICE, now, invoices, List.of())));
+    }
+
+    private static ImportAnalysis.Transaction testRow(int line, String date, String party, String number, String type,
+            Long amount, Long supply, Long vat, Long deposit, Long withdrawal, String description) {
+        return new ImportAnalysis.Transaction(1, line, date, "", party, number, type, "TEST-" + line, "", amount,
+                supply, vat, deposit, withdrawal, null, description, "KRW", "", "개발 테스트");
+    }
+
+    private static ImportAnalysis.Document testDocument(String month, ImportFiles.Kind kind, String now,
+            List<ImportAnalysis.Transaction> rows, List<ImportAnalysis.CardReview> reviews) {
+        String id = "generated-test-" + month + "-" + kind;
+        var entry = new ImportFiles.Entry(id, kind, "[개발 테스트] " + month + " " + ImportWorkbook.label(kind), 0,
+                "application/x-receipt-generated-test", 0, now, kind == ImportFiles.Kind.TAX_INVOICE ? "매입" : "");
+        return new ImportAnalysis.Document(entry, new ImportAnalysis.Result(id, "READY", now, rows, List.of(), reviews));
     }
 
     public synchronized List<ImportAnalysis.Document> clearTestReviews() throws IOException {

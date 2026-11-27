@@ -97,6 +97,27 @@ class ImportCardVatTest {
         assertEquals(List.of(live), service.clearTestReviews().get(0).analysis().cardReviews());
     }
 
+    @Test void selectedMonthCanGenerateExportAndClearWithoutDeletingUploadedOriginals() throws Exception {
+        var files = new ImportFiles(json, data.toString()); var analysis = new ImportAnalysis(files, json, data.toString());
+        var uploaded = sample(files); var original = Files.readAllBytes(files.original(uploaded.id()));
+        var service = new ImportCardVat(analysis, new NtsBusinessLookup(null, json, ""), json, clock);
+        service.generateTestMonth("2026-09"); service.generateTestMonth("2026-09");
+        var generated = analysis.list().stream().filter(document -> document.file().id().startsWith("generated-test-")).toList();
+        assertEquals(3, generated.size());
+        assertEquals(7, generated.stream().mapToInt(document -> document.analysis().rows().size()).sum());
+        assertTrue(generated.stream().flatMap(document -> document.analysis().rows().stream()).allMatch(row -> row.date().equals("2026-09-10")));
+        assertEquals(15545L, generated.stream().flatMap(document -> document.analysis().cardReviews().stream())
+                .mapToLong(review -> review.candidateVat() == null ? 0 : review.candidateVat()).sum());
+        var restored = new ImportAnalysis(files, json, data.toString()).list();
+        assertTrue(ImportWorkbook.hasTransactions(restored, "2026-09"));
+        try (var book = new XSSFWorkbook(new ByteArrayInputStream(ImportWorkbook.create(restored, "2026-09")))) {
+            assertEquals(7, book.getSheet("통합내역").getLastRowNum());
+        }
+        service.clearTestReviews();
+        assertFalse(ImportWorkbook.hasTransactions(analysis.list(), "2026-09"));
+        assertEquals(1, files.list().size()); assertArrayEquals(original, Files.readAllBytes(files.original(uploaded.id())));
+    }
+
     @Test void liveFailuresNeverPromoteTestResultsAndBatchDeduplicatesNumbers() throws Exception {
         var files = new ImportFiles(json, data.toString()); var analysis = new ImportAnalysis(files, json, data.toString());
         var file = sample(files); analysis.analyze(file.id());

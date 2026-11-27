@@ -31,6 +31,9 @@ public class ImportController {
     @PostMapping("/card-vat") public List<ImportAnalysis.Document> cardVat(@RequestParam(defaultValue = "LIVE") String mode) throws IOException {
         return cardVat.review(mode);
     }
+    @PostMapping("/card-vat/test-month") public List<ImportAnalysis.Document> generateTestMonth(@RequestParam String month) throws IOException {
+        return cardVat.generateTestMonth(month);
+    }
     @PostMapping("/card-vat/clear-test") public List<ImportAnalysis.Document> clearTestReviews() throws IOException {
         return cardVat.clearTestReviews();
     }
