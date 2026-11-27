@@ -12,10 +12,20 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/imports")
 public class ImportController {
     private final ImportFiles files;
-    public ImportController(ImportFiles files) { this.files = files; }
+    private final ImportAnalysis analysis;
+    public ImportController(ImportFiles files, ImportAnalysis analysis) { this.files = files; this.analysis = analysis; }
     @GetMapping public List<ImportFiles.Entry> list() throws IOException { return files.list(); }
     @PostMapping public ImportFiles.Entry upload(@RequestParam("kind") ImportFiles.Kind kind,
             @RequestParam("file") MultipartFile file) throws IOException { return files.upload(kind, file); }
+    @GetMapping("/analysis") public List<ImportAnalysis.Document> analysis() throws IOException { return analysis.list(); }
+    @PostMapping("/{id}/analyze") public ImportAnalysis.Result analyze(@PathVariable String id) throws IOException { return analysis.analyze(id); }
+    @GetMapping("/export.xlsx") public ResponseEntity<byte[]> export(@RequestParam(required = false) String month) throws IOException {
+        String selected = ImportAnalysis.month(month);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename("추출내역_" + (selected.isEmpty() ? "전체" : selected) + ".xlsx", StandardCharsets.UTF_8).build().toString())
+                .body(ImportWorkbook.create(analysis.list(), selected));
+    }
     @GetMapping("/{id}/original") public ResponseEntity<FileSystemResource> original(@PathVariable String id) throws IOException {
         var entry = files.get(id);
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(entry.mediaType()))

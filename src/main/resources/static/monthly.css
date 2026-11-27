@@ -1,0 +1,23 @@
+.workspace-mobile-nav{display:none}
+.month-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin-bottom:22px}
+.month-picker label{font-size:12px;font-weight:600}
+.month-picker input{width:160px}
+.month-picker .button{min-width:40px}
+.results-period{margin:0 0 5px;font-size:21px;letter-spacing:-.5px}
+.results-note{font-size:12px;color:#64748b;line-height:1.8;margin:0 0 20px}
+.results-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:26px}
+.result-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px}
+.result-card h3{font-size:13px;margin:0 0 12px;color:#53657e;font-weight:600}
+.result-card strong{display:block;font-size:29px;line-height:1.4;font-variant-numeric:tabular-nums}
+.result-card p{font-size:11px;color:#718197;margin:8px 0 0}
+.results-section{margin-bottom:26px}
+.results-section>h2{font-size:17px;margin:0 0 12px}
+.results-tax{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:0}
+.results-tax .result-card{border-top:3px solid #b8c9e4}
+.results-tax .result-card:last-child{border-top-color:#dfc18b}
+.results-review{background:white;border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;justify-content:space-between;align-items:center;gap:20px}
+.results-review h2{font-size:17px;margin:0 0 8px}
+.results-review p{margin:0;color:#718197;font-size:12px;line-height:1.8}
+@media(max-width:1100px){.results-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.results-tax{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:850px){.workspace-mobile-nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}.workspace-mobile-nav .nav-active{background:#e6edfc;border-color:#b8cbee;color:#225cea}}
+@media(max-width:600px){.month-picker{padding:15px;gap:8px}.month-picker label{width:100%}.month-picker input{flex:1;min-width:120px}.result-card{padding:18px}.results-tax{grid-template-columns:1fr}.results-review{align-items:start;flex-direction:column}}

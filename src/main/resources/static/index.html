@@ -1,18 +1,18 @@
 <!doctype html>
 <html lang="ko">
 <!-- 정적 화면 골격입니다. 실제 장부 데이터와 버튼 동작은 app.js가 연결합니다. -->
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>자료 가져오기 | ReceiptToExcel</title><link rel="stylesheet" href="/app.css"><script src="/bookkeeping.js" defer></script><script src="/duplicates.js" defer></script><script src="/nts.js" defer></script><script src="/nts-settings.js" defer></script><script src="/document-forms.js" defer></script><script src="/invoices.js" defer></script><script src="/app.js" defer></script><link rel="stylesheet" href="/imports.css"><script src="/imports.js" defer></script></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>자료 가져오기 | ReceiptToExcel</title><link rel="stylesheet" href="/app.css"><script src="/bookkeeping.js" defer></script><script src="/duplicates.js" defer></script><script src="/nts.js" defer></script><script src="/nts-settings.js" defer></script><script src="/document-forms.js" defer></script><script src="/invoices.js" defer></script><script src="/app.js" defer></script><link rel="stylesheet" href="/imports.css"><script src="/imports.js" defer></script><link rel="stylesheet" href="/monthly.css"><script src="/monthly.js" defer></script></head>
 <body>
 <!-- 탐색 메뉴와 실행 방식 안내: 이 화면은 로컬 장부를 사용하는 단일 작업 공간입니다. -->
 <aside class="sidebar">
   <a class="brand" href="/"><span class="brand-mark">R</span><span>영수증 장부<small>ReceiptToExcel</small></span></a>
   <div class="workspace">내 컴퓨터의 작업 공간<span class="local-dot">로컬 실행 중</span></div>
-  <nav><button id="imports-nav" class="nav-active">자료 가져오기</button><button id="legacy-nav">기존 경비 지출장부</button><button id="nts-settings-button">⚙ <span>국세청 연결 설정</span></button><button id="guide-button">ⓘ <span>사용 및 연결 안내</span></button></nav>
+  <nav><button id="imports-nav" class="nav-active">자료 가져오기</button><button id="monthly-nav">월별 결과</button><button id="legacy-nav">기존 경비 지출장부</button><button id="nts-settings-button">⚙ <span>국세청 연결 설정</span></button><button id="guide-button">ⓘ <span>사용 및 연결 안내</span></button></nav>
   <div class="sidebar-bottom"><div class="mode-icon">⌂</div><strong>서버 비용 없이, 내 PC에서</strong><p>사진과 장부는 이 컴퓨터에 저장됩니다.</p><span id="mode-label" class="mode-label">실행 방식 확인 중</span></div>
 </aside>
-<main>
+<main><nav class="workspace-mobile-nav" aria-label="작업 화면"><button type="button" id="mobile-imports" class="button nav-active">자료 가져오기</button><button type="button" id="mobile-monthly" class="button">월별 결과</button><button type="button" id="mobile-legacy" class="button">기존 장부</button></nav>
 <section id="import-home" aria-labelledby="import-title">
-<header class="import-header"><div><h1 id="import-title">자료 가져오기</h1><p>카드·계좌·세금계산서 자료와 영수증 사진을 등록하세요.</p></div><div class="header-actions"><button type="button" id="import-refresh" class="button">새로고침</button><button type="button" class="button import-mobile-legacy" id="mobile-legacy">기존 장부</button></div></header>
+<header class="import-header"><div><h1 id="import-title">자료 가져오기</h1><p>카드·계좌·세금계산서 자료와 영수증 사진을 등록하세요.</p></div><div class="header-actions"><button type="button" id="import-refresh" class="button">새로고침</button><div class="pending-action"><button type="button" id="import-analyze" class="button primary" disabled aria-describedby="import-analyze-help">등록 자료 분석</button><p id="import-analyze-help">등록한 PDF에서 거래를 추출합니다. 다시 분석하면 파일별 결과를 갱신합니다.</p></div></div></header>
 <div class="import-grid">
 <section class="import-card"><h2>법인카드 PDF</h2><p>법인카드의 승인·사용내역 문서 PDF를 등록하세요.</p><label>카드 사용내역 선택<input type="file" data-import-kind="CARD_PDF" accept=".pdf,application/pdf" multiple></label></section>
 <section class="import-card"><h2>계좌 입출금 PDF</h2><p>입금과 출금이 포함된 계좌 거래내역 문서 PDF를 등록하세요.</p><label>계좌 거래내역 선택<input type="file" data-import-kind="ACCOUNT_PDF" accept=".pdf,application/pdf" multiple></label></section>
@@ -22,11 +22,39 @@
 <p class="import-note">PDF는 파일당 25MB·100쪽, 사진은 10MB까지 등록할 수 있습니다. 카드·계좌 자료는 글자를 선택할 수 있는 문서 PDF로 준비해 주세요.</p>
 <div id="import-status" class="notice import-status" role="status" hidden></div>
 <section class="ledger-section" aria-labelledby="import-list-title">
-<div class="section-heading"><div><h2 id="import-list-title">등록한 자료 <span id="import-count">0개</span></h2><p>원본 저장 후 거래 추출·국세청 일괄조회·사진 매칭 기능을 이어서 연결할 예정입니다.</p></div></div>
+<div class="section-heading"><div><h2 id="import-list-title">등록한 자료 <span id="import-count">0개</span></h2><p>PDF를 등록한 뒤 등록 자료 분석을 실행하세요. 추출 확인사항은 월별 결과와 엑셀에 표시됩니다.</p></div></div>
 <div class="import-toolbar"><label>자료 종류<select id="import-kind-filter"><option value="">전체</option><option value="CARD_PDF">법인카드 PDF</option><option value="ACCOUNT_PDF">계좌 입출금 PDF</option><option value="TAX_INVOICE">세금계산서</option><option value="RECEIPT_PHOTO">영수증 사진</option></select></label></div>
 <div class="table-scroll"><table class="import-table"><thead><tr><th>파일명</th><th>자료 종류</th><th>쪽 수 / 크기</th><th>등록일시</th><th>처리 상태</th><th>원본</th></tr></thead><tbody id="import-rows"></tbody></table></div>
 <p id="import-empty" class="import-empty">자료 목록을 불러오고 있습니다.</p>
 </section></section>
+<section id="monthly-results" hidden aria-labelledby="results-title">
+<header><div><h1 id="results-title" tabindex="-1">월별 결과</h1><p>월별 거래와 부가세 검토 현황을 확인하세요.</p></div><div class="header-actions"><div class="pending-action"><button type="button" id="results-export" class="button primary" disabled aria-describedby="results-export-help">엑셀 만들기</button><p id="results-export-help">자료별 추출 내역을 한 엑셀에 저장합니다. 분석 후 사용할 수 있습니다.</p></div></div></header>
+<div class="month-picker" role="group" aria-label="조회 월 선택">
+<label for="results-month">조회 월</label><button type="button" id="results-previous" class="button" aria-label="이전 달">←</button><input id="results-month" type="month" min="1900-01" max="9999-12" required><button type="button" id="results-next" class="button" aria-label="다음 달">→</button><button type="button" id="results-current" class="button">이번 달</button>
+</div>
+<div id="results-error" class="notice error" role="alert" hidden></div><label for="results-export-scope">엑셀 범위</label><select id="results-export-scope" class="results-export-scope"><option value="all">등록 자료 전체</option><option value="month">선택한 월</option></select><h2 id="results-period" class="results-period" aria-live="polite"></h2>
+<p class="results-note">자료별 사용일·입출금일·작성일 기준입니다. 금액은 추출된 원화 행의 합계입니다. 누락·통화 미확인 행과 처리현황을 확인해 주세요. 거래 간 대조·부가세 공제 검토·사진 연결은 준비 중입니다.</p>
+<section class="results-section" aria-labelledby="results-transactions-title">
+<h2 id="results-transactions-title">거래 현황</h2>
+<div class="results-grid">
+<article class="result-card"><h3>카드 사용액</h3><strong id="results-card-total">—</strong><p>사용일 기준 · 취소 반영 후 집계</p></article>
+<article class="result-card"><h3>계좌 입금액</h3><strong id="results-deposit-total">—</strong><p>입금일 기준 · 전체 입금</p></article>
+<article class="result-card"><h3>계좌 출금액</h3><strong id="results-withdrawal-total">—</strong><p>출금일 기준 · 카드대금 포함</p></article>
+<article class="result-card"><h3>세금계산서</h3><strong id="results-invoice-count">—</strong><p>작성일 기준 · 수정분 포함</p></article>
+</div>
+</section>
+<section class="results-section" aria-labelledby="results-tax-title">
+<h2 id="results-tax-title">부가세 검토</h2>
+<div class="results-grid results-tax">
+<article class="result-card"><h3>공제 대상 부가세</h3><strong aria-label="집계 대기">—</strong><p>공제 검토 결과에 따른 세액</p></article>
+<article class="result-card"><h3>공제 제외 부가세</h3><strong aria-label="집계 대기">—</strong><p>제외 사유가 확인된 세액</p></article>
+<article class="result-card"><h3>검토 필요</h3><strong aria-label="집계 대기">—</strong><p>사업자 미조회·판단 보류 내역</p></article>
+</div>
+</section>
+<section class="results-review" aria-labelledby="results-review-title">
+<div><h2 id="results-review-title">추출 확인사항 · 등록 자료 전체</h2><p id="results-review-empty">분석 결과를 불러오고 있습니다.</p><ul id="results-analysis-detail"></ul></div><button type="button" id="results-import" class="button">자료 가져오기</button>
+</section>
+</section>
 <section id="legacy-workspace" hidden aria-label="기존 경비 지출장부"><button type="button" id="legacy-back" class="button legacy-return">← 자료 가져오기로</button>
   <header><div><span class="eyebrow">EXPENSE WORKSPACE</span><h1>경비 지출장부</h1><p>영수증을 읽고, 검토하고, 장부로 정리하세요.</p></div><div class="header-actions"><button id="refresh-button" class="button">새로고침</button><a class="button primary" id="export-link" href="/api/export.xlsx">↓ 엑셀 내보내기</a></div></header>
   <!-- 사진 등록: 업무 목적은 선택 입력이며 OCR 이후 계정과목 제안에 참고합니다. -->
