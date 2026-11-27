@@ -33,17 +33,7 @@ public class ImportCardVat {
         var lookups = new HashMap<String, NtsBusinessLookup.Result>();
         var failures = new HashMap<String, String>();
         if (mode.equals("TEST")) {
-            try (var input = new ClassPathResource("samples/import-nts-test.json").getInputStream()) {
-                var samples = json.readTree(input);
-                for (String number : numbers) {
-                    var sample = samples.path(number);
-                    String type = sample.path("taxTypeCode").asText("");
-                    lookups.put(number, new NtsBusinessLookup.Result(number, type.isEmpty() ? "NOT_FOUND" : "FOUND",
-                            type.isEmpty() ? "" : "01", type.isEmpty() ? "조회되지 않음" : "계속사업자",
-                            type, sample.path("taxType").asText("테스트 응답 없음"), "", "",
-                            sample.path("invoiceAppliedOn").asText(""), "", Instant.now(clock).toString()));
-                }
-            }
+            lookups.putAll(testLookups(numbers));
         } else {
             for (int start = 0; start < numbers.size(); start += 100) {
                 var batch = numbers.subList(start, Math.min(start + 100, numbers.size()));
@@ -73,6 +63,22 @@ public class ImportCardVat {
             analysis.saveCardReviews(document.analysis(), reviews);
         }
         return analysis.list();
+    }
+
+    private Map<String, NtsBusinessLookup.Result> testLookups(List<String> numbers) throws IOException {
+        var results = new HashMap<String, NtsBusinessLookup.Result>();
+        try (var input = new ClassPathResource("samples/import-nts-test.json").getInputStream()) {
+            var samples = json.readTree(input);
+            for (String number : numbers) {
+                var sample = samples.path(number);
+                String type = sample.path("taxTypeCode").asText("");
+                results.put(number, new NtsBusinessLookup.Result(number, type.isEmpty() ? "NOT_FOUND" : "FOUND",
+                        type.isEmpty() ? "" : "01", type.isEmpty() ? "조회되지 않음" : "계속사업자",
+                        type, sample.path("taxType").asText("테스트 응답 없음"), "", "",
+                        sample.path("invoiceAppliedOn").asText(""), "", Instant.now(clock).toString()));
+            }
+        }
+        return results;
     }
 
     private static VatDeductionReview.Result evaluate(ImportAnalysis.Transaction row, NtsBusinessLookup.Result lookup, String failure) {

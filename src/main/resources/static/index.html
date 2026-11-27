@@ -33,7 +33,7 @@
 <div class="month-picker" role="group" aria-label="조회 월 선택">
 <label for="results-month">조회 월</label><button type="button" id="results-previous" class="button" aria-label="이전 달">←</button><input id="results-month" type="month" min="1900-01" max="9999-12" required><button type="button" id="results-next" class="button" aria-label="다음 달">→</button><button type="button" id="results-current" class="button">이번 달</button>
 </div>
-<div id="results-error" class="notice error" role="alert" hidden></div><label for="results-export-scope">엑셀 범위</label><select id="results-export-scope" class="results-export-scope"><option value="all">등록 자료 전체</option><option value="month">선택한 월</option></select><h2 id="results-period" class="results-period" aria-live="polite"></h2>
+<div class="row results-view-actions"><button type="button" id="results-test-lookup" class="button" disabled>테스트 조회 적용</button><span class="results-note">등록한 가상 카드 자료에 테스트 응답을 적용합니다.</span></div><div id="results-error" class="notice error" role="alert" hidden></div><label for="results-export-scope">엑셀 범위</label><select id="results-export-scope" class="results-export-scope"><option value="all">등록 자료 전체</option><option value="month">선택한 월</option></select><h2 id="results-period" class="results-period" aria-live="polite"></h2>
 <p class="results-note">자료별 사용일·입출금일·작성일 기준입니다. 금액은 추출된 원화 행의 합계입니다. 누락·통화 미확인 행과 처리현황을 확인해 주세요. 카드 부가세 검토는 별도 실행하며, 거래 간 대조·사진 연결은 준비 중입니다.</p>
 <section class="results-section" aria-labelledby="results-transactions-title">
 <h2 id="results-transactions-title">거래 현황</h2>
@@ -46,12 +46,13 @@
 </section>
 <section class="results-section" aria-labelledby="results-tax-title">
 <h2 id="results-tax-title">카드 부가세 검토</h2><p class="results-note" id="results-vat-source"></p>
-<div class="results-grid results-tax">
+<div class="results-grid results-tax"><article class="result-card"><h3>원본 부가세 합계</h3><strong id="results-vat-total">—</strong><p id="results-vat-total-note">원본 기재 세액 합계</p></article>
 <article class="result-card"><h3>공제 후보 부가세</h3><strong id="results-vat-candidate">—</strong><p>공제 검토 결과에 따른 세액</p></article>
 <article class="result-card"><h3>불공제 검토 세액</h3><strong id="results-vat-excluded">—</strong><p>제외 사유가 확인된 세액</p></article>
 <article class="result-card"><h3>검토 필요</h3><strong id="results-vat-pending">—</strong><p>사업자 미조회·판단 보류 내역</p></article>
 </div>
 </section>
+<section class="ledger-section results-vat-section" aria-labelledby="results-vat-list-title"><div class="section-heading"><div><h2 id="results-vat-list-title">거래별 과세유형·부가세 <span id="results-vat-count"></span></h2><p>조회 결과와 원본 세액, 공제 검토 사유를 함께 확인하세요.</p></div></div><div class="table-scroll"><table class="results-vat-table"><thead><tr><th>거래일</th><th>거래처</th><th>과세유형</th><th>원본 부가세</th><th>공제 후보 세액</th><th>검토 결과</th><th>검토 사유</th><th>조회구분</th></tr></thead><tbody id="results-vat-rows"></tbody></table></div><p class="import-empty" id="results-vat-empty">선택한 월의 카드 내역이 없습니다.</p></section>
 <section class="results-review" aria-labelledby="results-review-title">
 <div><h2 id="results-review-title">추출 확인사항 · 등록 자료 전체</h2><p id="results-review-empty">분석 결과를 불러오고 있습니다.</p><ul id="results-analysis-detail"></ul></div><button type="button" id="results-import" class="button">자료 가져오기</button>
 </section>

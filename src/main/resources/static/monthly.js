@@ -3,7 +3,7 @@ window.MonthlyResults = (() => {
   const el = id => document.getElementById(id);
   const monthInput = el("results-month");
   const now = new Date();
-  let documents = [], revision = 0, exporting = false;
+  let documents = [], revision = 0, exporting = false, reviewing = false;
 
   function setMonth(year, month) {
     monthInput.value = `${year}-${String(month).padStart(2, "0")}`;
@@ -15,7 +15,8 @@ window.MonthlyResults = (() => {
     el("results-period").textContent = valid ? `${Number(match[1])}년 ${Number(match[2])}월` : "조회할 월을 선택해 주세요.";
     el("results-previous").disabled = !valid || monthInput.value === "1900-01";
     el("results-next").disabled = !valid || monthInput.value === "9999-12";
-    el("results-export").disabled = exporting || !documents.some(sourceDocument=> sourceDocument.analysis.analyzedAt)
+    el("results-test-lookup").disabled=reviewing || !documents.some(sourceDocument=>sourceDocument.file.kind==="CARD_PDF" && sourceDocument.analysis.rows.length>0);
+    el("results-export").disabled = exporting || reviewing || !documents.some(sourceDocument=> sourceDocument.analysis.analyzedAt)
       || (el("results-export-scope").value === "month" && !valid);
     const kindRows = kind => documents.filter(sourceDocument=> sourceDocument.file.kind === kind && sourceDocument.analysis.analyzedAt)
       .flatMap(sourceDocument=> sourceDocument.analysis.rows).filter(row => valid && row.date.startsWith(monthInput.value + "-"));
@@ -32,14 +33,31 @@ window.MonthlyResults = (() => {
     const invoices = kindRows("TAX_INVOICE");
     el("results-invoice-count").textContent = valid && documents.some(sourceDocument=> sourceDocument.file.kind === "TAX_INVOICE" && sourceDocument.analysis.rows.length > 0)
       ? `매출 ${invoices.filter(row => row.type === "매출").length}건 · 매입 ${invoices.filter(row => row.type === "매입").length}건 · 미지정 ${invoices.filter(row => !["매출", "매입"].includes(row.type)).length}건` : "—";
-    const cardReviews=[];
+    const cardReviews=[],cardItems=[];
     for(const sourceDocument of documents.filter(sourceDocument=>sourceDocument.file.kind==="CARD_PDF")){
-      const rowsByLocation=new Map(sourceDocument.analysis.rows.map(row=>[row.page+"/"+row.line+"/"+(row.sheet || ""),row]));
-      for(const tax of sourceDocument.analysis.cardReviews || []){
-        const row=rowsByLocation.get(tax.page+"/"+tax.line+"/"+(tax.sheet || ""));
-        if(row && valid && row.date.startsWith(monthInput.value+"-"))cardReviews.push({tax,row,file:sourceDocument.file.name});
+      const taxes=new Map((sourceDocument.analysis.cardReviews || []).map(tax=>[tax.page+"/"+tax.line+"/"+(tax.sheet || ""),tax]));
+      for(const row of sourceDocument.analysis.rows){
+        if(!valid || !row.date.startsWith(monthInput.value+"-"))continue;
+        const tax=taxes.get(row.page+"/"+row.line+"/"+(row.sheet || ""));
+        const item={tax,row,file:sourceDocument.file.name};cardItems.push(item);
+        if(tax)cardReviews.push(item);
       }
     }
+    const money=value=>value==null?"미기재":value.toLocaleString("ko-KR")+"원";
+    const missingVat=cardItems.filter(item=>item.row.vat==null).length;
+    const hasCards=documents.some(sourceDocument=>sourceDocument.file.kind==="CARD_PDF" && sourceDocument.analysis.rows.length>0);
+    el("results-vat-total").textContent=valid && hasCards?cardItems.reduce((sum,item)=>sum+(item.row.vat ?? 0),0).toLocaleString("ko-KR")+"원":"—";
+    el("results-vat-total-note").textContent=missingVat?`세액 미기재 ${missingVat}건 · 기재된 세액만 합산`:"원본 기재 세액 합계 · 취소·확인 필요 포함";
+    const body=el("results-vat-rows");body.replaceChildren();
+    cardItems.sort((a,b)=>a.row.date.localeCompare(b.row.date));
+    for(const item of cardItems.slice(0,200)){
+      const tax=item.tax,row=item.row,tr=document.createElement("tr");
+      const values=[row.date,row.party,tax?.lookup?.taxType || "미조회",money(row.vat),tax?.candidateVat==null?"—":money(tax.candidateVat),
+        tax?.review?.label || "미조회",tax?.review?.reason || "카드 과세유형·부가세 검토를 실행해 주세요.",tax?(tax.mode==="TEST"?"테스트 조회":"국세청 실제 조회"):"미조회"];
+      values.forEach(value=>{const cell=document.createElement("td");cell.textContent=value;tr.append(cell);});body.append(tr);
+    }
+    el("results-vat-empty").hidden=cardItems.length>0;
+    el("results-vat-count").textContent=cardItems.length>200?`${cardItems.length}건 중 200건 표시 · 전체는 엑셀에서 확인`:`${cardItems.length}건`;
     const tested=cardReviews.filter(item=>item.tax.mode==="TEST").length;
     el("results-vat-source").textContent=cardReviews.length?`테스트 조회 ${tested}건 · 국세청 실제 조회 ${cardReviews.length-tested}건 · 카드 내역 기준`:
       "자료 가져오기에서 카드 과세유형·부가세 검토를 실행하세요. 테스트 조회는 가상 응답을 사용합니다.";
@@ -67,6 +85,7 @@ window.MonthlyResults = (() => {
       : "자료 가져오기에서 ‘등록 자료 분석’을 실행해 주세요.";
   }
   async function refresh() {
+    if(reviewing)return;
     const current = ++revision;
     try {
       const result = await api("/api/imports/analysis");
@@ -79,12 +98,30 @@ window.MonthlyResults = (() => {
       el("results-error").hidden = false;
     }
   }
+  async function applyTestLookup(){
+    if(reviewing || el("results-test-lookup").disabled)return;
+    reviewing=true;render();el("results-test-lookup").textContent="테스트 조회 적용 중…";
+    const current=++revision;
+    try{
+      const result=await api("/api/imports/card-vat?mode=TEST",{method:"POST"});
+      if(current!==revision)return;
+      documents=result;
+      const months=[...new Set(documents.filter(sourceDocument=>sourceDocument.file.kind==="CARD_PDF")
+        .flatMap(sourceDocument=>sourceDocument.analysis.rows).map(row=>row.date.slice(0,7))
+        .filter(month=>/^\d{4}-\d{2}$/.test(month)))].sort().reverse();
+      if(months.length && !months.includes(monthInput.value))monthInput.value=months[0];
+      render();el("results-error").hidden=true;
+    }catch(error){
+      if(current===revision){el("results-error").textContent=error.message;el("results-error").hidden=false;}
+    }finally{reviewing=false;el("results-test-lookup").textContent="테스트 조회 적용";render();}
+  }
   async function exportWorkbook() {
     if (exporting || el("results-export").disabled) return;
     exporting = true; render(); el("results-export").textContent = "엑셀 만드는 중…";
     try {
       const month = el("results-export-scope").value === "month" ? monthInput.value : "";
-      const response = await fetch("/api/imports/export.xlsx" + (month ? "?month=" + encodeURIComponent(month) : ""));
+      const path="/api/imports/export.xlsx";
+      const response = await fetch(path + (month ? "?month=" + encodeURIComponent(month) : ""));
       if (!response.ok) throw new Error("엑셀 생성에 실패했습니다. 다시 시도해 주세요.");
       const blob = await response.blob(), url = URL.createObjectURL(blob);
       const link = document.createElement("a"); link.href = url; link.download = "추출내역_" + (month || "전체") + ".xlsx";
@@ -103,6 +140,7 @@ window.MonthlyResults = (() => {
   function init() {
     setMonth(now.getFullYear(), now.getMonth() + 1);
     monthInput.addEventListener("change", render);
+    el("results-test-lookup").addEventListener("click",applyTestLookup);
     el("results-export-scope").addEventListener("change", render);
     el("results-export").addEventListener("click", exportWorkbook);
     el("results-previous").addEventListener("click", () => moveMonth(-1));
