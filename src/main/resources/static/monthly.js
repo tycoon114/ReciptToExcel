@@ -15,12 +15,12 @@ window.MonthlyResults = (() => {
     el("results-period").textContent = valid ? `${Number(match[1])}년 ${Number(match[2])}월` : "조회할 월을 선택해 주세요.";
     el("results-previous").disabled = !valid || monthInput.value === "1900-01";
     el("results-next").disabled = !valid || monthInput.value === "9999-12";
-    el("results-export").disabled = exporting || !documents.some(document => document.analysis.analyzedAt)
+    el("results-export").disabled = exporting || !documents.some(sourceDocument=> sourceDocument.analysis.analyzedAt)
       || (el("results-export-scope").value === "month" && !valid);
-    const kindRows = kind => documents.filter(document => document.file.kind === kind && document.analysis.analyzedAt)
-      .flatMap(document => document.analysis.rows).filter(row => valid && row.date.startsWith(monthInput.value + "-"));
+    const kindRows = kind => documents.filter(sourceDocument=> sourceDocument.file.kind === kind && sourceDocument.analysis.analyzedAt)
+      .flatMap(sourceDocument=> sourceDocument.analysis.rows).filter(row => valid && row.date.startsWith(monthInput.value + "-"));
     function amount(id, kind, key) {
-      const analyzed = documents.some(document => document.file.kind === kind && document.analysis.rows.length > 0);
+      const analyzed = documents.some(sourceDocument=> sourceDocument.file.kind === kind && sourceDocument.analysis.rows.length > 0);
       const selected = kindRows(kind);
       const rows = selected.filter(row => row.currency === "KRW");
       const knownCurrency = selected.length === 0 || rows.length > 0;
@@ -30,14 +30,14 @@ window.MonthlyResults = (() => {
     amount("results-deposit-total", "ACCOUNT_PDF", "deposit");
     amount("results-withdrawal-total", "ACCOUNT_PDF", "withdrawal");
     const invoices = kindRows("TAX_INVOICE");
-    el("results-invoice-count").textContent = valid && documents.some(document => document.file.kind === "TAX_INVOICE" && document.analysis.rows.length > 0)
+    el("results-invoice-count").textContent = valid && documents.some(sourceDocument=> sourceDocument.file.kind === "TAX_INVOICE" && sourceDocument.analysis.rows.length > 0)
       ? `매출 ${invoices.filter(row => row.type === "매출").length}건 · 매입 ${invoices.filter(row => row.type === "매입").length}건 · 미지정 ${invoices.filter(row => !["매출", "매입"].includes(row.type)).length}건` : "—";
     const cardReviews=[];
-    for(const document of documents.filter(document=>document.file.kind==="CARD_PDF")){
-      const rowsByLocation=new Map(document.analysis.rows.map(row=>[row.page+"/"+row.line+"/"+(row.sheet || ""),row]));
-      for(const tax of document.analysis.cardReviews || []){
+    for(const sourceDocument of documents.filter(sourceDocument=>sourceDocument.file.kind==="CARD_PDF")){
+      const rowsByLocation=new Map(sourceDocument.analysis.rows.map(row=>[row.page+"/"+row.line+"/"+(row.sheet || ""),row]));
+      for(const tax of sourceDocument.analysis.cardReviews || []){
         const row=rowsByLocation.get(tax.page+"/"+tax.line+"/"+(tax.sheet || ""));
-        if(row && valid && row.date.startsWith(monthInput.value+"-"))cardReviews.push({tax,row,file:document.file.name});
+        if(row && valid && row.date.startsWith(monthInput.value+"-"))cardReviews.push({tax,row,file:sourceDocument.file.name});
       }
     }
     const tested=cardReviews.filter(item=>item.tax.mode==="TEST").length;
@@ -49,10 +49,10 @@ window.MonthlyResults = (() => {
     const cardCount=kindRows("CARD_PDF").length;
     el("results-vat-pending").textContent=cardCount?((cardCount-cardReviews.length)+cardReviews.filter(item=>item.tax.review.code==="REVIEW").length)+"건":"—";
     const detail = el("results-analysis-detail"); detail.replaceChildren();
-    for (const document of documents) {
-      for (const issue of document.analysis.issues) {
+    for (const sourceDocument of documents) {
+      for (const issue of sourceDocument.analysis.issues) {
         const item = document.createElement("li");
-        item.textContent = document.file.name + (issue.sheet ? ` · ${issue.sheet}` : issue.page ? ` · ${issue.page}쪽` : "") + " · " + issue.message;
+        item.textContent = sourceDocument.file.name + (issue.sheet ? ` · ${issue.sheet}` : issue.page ? ` · ${issue.page}쪽` : "") + " · " + issue.message;
         detail.append(item);
       }
     }
@@ -62,7 +62,7 @@ window.MonthlyResults = (() => {
       detail.append(line);
     }
     el("results-review-empty").hidden = detail.childElementCount > 0;
-    el("results-review-empty").textContent = documents.some(document => document.analysis.analyzedAt)
+    el("results-review-empty").textContent = documents.some(sourceDocument=> sourceDocument.analysis.analyzedAt)
       ? "등록 자료에서 보고된 추출 오류가 없습니다. 원본과 추출 내용을 확인해 주세요."
       : "자료 가져오기에서 ‘등록 자료 분석’을 실행해 주세요.";
   }

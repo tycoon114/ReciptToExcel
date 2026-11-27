@@ -57,6 +57,7 @@ window.ImportHome=(()=>{
   function lock(value){
     busy=value;
     document.querySelectorAll("[data-import-kind]").forEach(input=>input.disabled=value);
+    document.querySelectorAll(".import-card").forEach(card=>card.setAttribute("aria-busy",String(value)));
     el("invoice-import-direction").disabled=value;
     el("import-vat-mode").disabled=value;
     el("import-refresh").disabled=value;
@@ -91,10 +92,10 @@ window.ImportHome=(()=>{
       message((mode==="TEST"?"테스트 조회":"국세청 실제 조회")+" 검토가 끝났습니다. 월별 결과와 통합내역 엑셀에서 확인하세요.");
     }finally{try{await refresh();}finally{lock(false);}}
   }
-  async function upload(input){
-    if(busy || !input.files.length)return;
+  async function upload(input,selectedFiles=Array.from(input.files)){
+    if(busy || !selectedFiles.length)return;
     lock(true);
-    const files=Array.from(input.files),kind=input.dataset.importKind;
+    const files=Array.from(selectedFiles),kind=input.dataset.importKind;
     const direction=kind==="TAX_INVOICE"?el("invoice-import-direction").value:"";
     const inputs=Array.from(document.querySelectorAll("[data-import-kind]"));
     inputs.forEach(node=>node.disabled=true);
@@ -103,6 +104,9 @@ window.ImportHome=(()=>{
       for(let i=0;i<files.length;i++){
         const file=files[i],limit=kind==="RECEIPT_PHOTO"?10:25;
         message(`${i+1}/${files.length} · ${file.name} 등록 중…`);
+        const extension=file.name.split(".").pop().toLowerCase();
+        const allowed=kind==="RECEIPT_PHOTO"?["jpg","jpeg","png"]:kind==="TAX_INVOICE"?["pdf","xlsx","xls","jpg","jpeg","png"]:["pdf","xlsx","xls"];
+        if(!allowed.includes(extension)){errors.push(file.name+" · 이 자료 종류에서 지원하지 않는 파일 형식입니다.");continue;}
         if(file.size>limit*1024*1024){errors.push(file.name+` · ${limit}MB를 초과했습니다.`);continue;}
         const data=new FormData();data.append("kind",kind);data.append("file",file);
         data.append("invoiceDirection",direction);
@@ -111,6 +115,32 @@ window.ImportHome=(()=>{
       }
       message(`${labels[kind]} ${saved}개를 등록했습니다.`+(errors.length?"\n"+errors.join("\n"):""),errors.length>0);
     }finally{lock(false);input.value="";}
+  }
+  function fileDrag(event){return Array.from(event.dataTransfer?.types || []).includes("Files");}
+  function bindDrop(input){
+    const card=input.closest(".import-card");
+    let depth=0;
+    card.addEventListener("dragenter",event=>{
+      if(!fileDrag(event))return;
+      event.preventDefault();depth++;
+      card.classList.toggle("import-dragging",!busy);
+    });
+    card.addEventListener("dragover",event=>{
+      if(!fileDrag(event))return;
+      event.preventDefault();event.dataTransfer.dropEffect=busy?"none":"copy";
+    });
+    card.addEventListener("dragleave",()=>{
+      depth=Math.max(0,depth-1);
+      if(!depth)card.classList.remove("import-dragging");
+    });
+    card.addEventListener("drop",event=>{
+      if(!fileDrag(event))return;
+      event.preventDefault();event.stopPropagation();depth=0;card.classList.remove("import-dragging");
+      if(busy){message("자료 처리 중입니다. 현재 작업이 끝난 뒤 파일을 놓아 주세요.",true);return;}
+      const files=Array.from(event.dataTransfer.files);
+      if(!files.length){message("등록할 파일을 선택해 자료 카드에 놓아 주세요.",true);return;}
+      upload(input,files).catch(error=>message(error.message,true));
+    });
   }
   function init(){
     el("monthly-nav").addEventListener("click",()=>showView("monthly"));
@@ -124,7 +154,16 @@ window.ImportHome=(()=>{
     el("import-analyze").addEventListener("click",()=>analyze().catch(error=>message(error.message,true)));
     el("import-vat-review").addEventListener("click",()=>reviewCardVat().catch(error=>message(error.message,true)));
     el("import-kind-filter").addEventListener("change",render);
-    document.querySelectorAll("[data-import-kind]").forEach(input=>input.addEventListener("change",()=>upload(input).catch(error=>message(error.message,true))));
+    document.querySelectorAll("[data-import-kind]").forEach(input=>{
+      input.addEventListener("change",()=>upload(input).catch(error=>message(error.message,true)));
+      bindDrop(input);
+    });
+    document.addEventListener("dragover",event=>{if(fileDrag(event))event.preventDefault();});
+    document.addEventListener("drop",event=>{
+      if(!fileDrag(event))return;
+      event.preventDefault();
+      if(!el("import-home").hidden && !event.target.closest?.(".import-card"))message("자료 종류에 맞는 카드 안에 파일을 놓아 주세요.",true);
+    });
     showView("imports");
     refresh().catch(error=>message("자료 목록을 불러오지 못했습니다. "+error.message,true));
   }
