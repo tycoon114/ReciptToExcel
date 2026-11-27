@@ -23,6 +23,10 @@ public class ImportController {
     @PostMapping public ImportFiles.Entry upload(@RequestParam("kind") ImportFiles.Kind kind,
             @RequestParam("file") MultipartFile file,
             @RequestParam(defaultValue = "") String invoiceDirection) throws IOException { return files.upload(kind, file, invoiceDirection); }
+    @DeleteMapping("/{id}") public ResponseEntity<Void> delete(@PathVariable String id) throws IOException {
+        analysis.delete(id);
+        return ResponseEntity.noContent().build();
+    }
     @GetMapping("/analysis") public List<ImportAnalysis.Document> analysis() throws IOException { return analysis.list(); }
     @PostMapping("/card-vat") public List<ImportAnalysis.Document> cardVat(@RequestParam(defaultValue = "LIVE") String mode) throws IOException {
         return cardVat.review(mode);

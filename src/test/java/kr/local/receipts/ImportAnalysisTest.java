@@ -66,6 +66,33 @@ class ImportAnalysisTest {
         }
     }
 
+    @Test void deletingARegisteredFileRemovesItsOriginalRowsAndReviewsWithoutAffectingOtherFiles() throws Exception {
+        var files = files(); var service = new ImportAnalysis(files, json, data.toString());
+        var card = upload(files, ImportFiles.Kind.CARD_PDF, "01_card_transactions.pdf");
+        var bank = upload(files, ImportFiles.Kind.ACCOUNT_PDF, "02_account_transactions.pdf");
+        var before = service.analyze(card.id()); service.analyze(bank.id());
+        var original = files.original(card.id());
+        service.saveCardReviews(before, List.of(new ImportAnalysis.CardReview(1, 1, "", "", "TEST", null, null, null, "", "")));
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> service.delete("../invalid"));
+        assertEquals(2, files.list().size());
+        service.delete(card.id());
+        assertFalse(Files.exists(original));
+        assertFalse(Files.exists(data.resolve("imports").resolve(card.id() + ".json")));
+        assertFalse(Files.exists(data.resolve("import-analysis").resolve(card.id() + ".json")));
+        assertEquals(List.of(bank.id()), service.list().stream().map(document -> document.file().id()).toList());
+        assertTrue(Files.exists(files.original(bank.id())));
+        var lateReview = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> service.saveCardReviews(before, List.of()));
+        assertEquals(409, lateReview.getStatusCode().value());
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> service.analyze(card.id()));
+        try (var book = new XSSFWorkbook(new ByteArrayInputStream(ImportWorkbook.create(service.list(), "")))) {
+            assertEquals(0, book.getSheet("카드내역").getLastRowNum());
+            assertEquals(0, book.getSheet("카드 부가세 검토").getLastRowNum());
+            assertEquals(13, book.getSheet("계좌입출금").getLastRowNum());
+            assertEquals(13, book.getSheet("통합내역").getLastRowNum());
+        }
+    }
+
     @Test void monthFilterUsesEachDocumentsTransactionDate() throws Exception {
         var files = files(); var service = new ImportAnalysis(files, json, data.toString());
         var bank = upload(files, ImportFiles.Kind.ACCOUNT_PDF, "02_account_transactions.pdf");

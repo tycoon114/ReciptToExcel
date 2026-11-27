@@ -27,7 +27,7 @@ public class ImportFiles {
         Files.createDirectories(root);
     }
 
-    public List<Entry> list() throws IOException {
+    public synchronized List<Entry> list() throws IOException {
         var entries = new ArrayList<Entry>();
         try (var paths = Files.list(root)) {
             for (Path path : paths.filter(p -> p.getFileName().toString().endsWith(".json")).toList()) {
@@ -115,11 +115,26 @@ public class ImportFiles {
         } finally { Files.deleteIfExists(temp); }
     }
 
-    public Entry get(String id) throws IOException {
+    public synchronized Entry get(String id) throws IOException {
         try { UUID.fromString(id); } catch (IllegalArgumentException e) { throw ReceiptService.bad("잘못된 자료 번호입니다."); }
         Path metadata = root.resolve(id + ".json");
         if (!Files.isRegularFile(metadata)) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND);
         return json.readValue(Files.readString(metadata), Entry.class);
     }
+    public synchronized void delete(String id) throws IOException {
+        get(id);
+        Path metadata = root.resolve(id + ".json");
+        Path deleting = root.resolve(id + ".deleting");
+        // 목록에서 먼저 숨기고, 원본 삭제 실패 시 등록 상태를 복구합니다.
+        Files.move(metadata, deleting, StandardCopyOption.ATOMIC_MOVE);
+        try {
+            Files.deleteIfExists(root.resolve(id + ".bin"));
+        } catch (IOException e) {
+            Files.move(deleting, metadata, StandardCopyOption.ATOMIC_MOVE);
+            throw e;
+        }
+        Files.deleteIfExists(deleting);
+    }
+
     public Path original(String id) throws IOException { get(id); return root.resolve(id + ".bin"); }
 }

@@ -113,7 +113,7 @@ window.MonthlyResults = (() => {
       render();el("results-error").hidden=true;
     }catch(error){
       if(current===revision){el("results-error").textContent=error.message;el("results-error").hidden=false;}
-    }finally{reviewing=false;el("results-test-lookup").textContent="테스트 조회 적용";render();}
+    }finally{reviewing=false;el("results-test-lookup").textContent="테스트 조회 적용";render();await refresh();}
   }
   async function exportWorkbook() {
     if (exporting || el("results-export").disabled) return;
@@ -147,7 +147,14 @@ window.MonthlyResults = (() => {
     el("results-next").addEventListener("click", () => moveMonth(1));
     el("results-current").addEventListener("click", () => setMonth(now.getFullYear(), now.getMonth() + 1));
     el("results-import").addEventListener("click", () => ImportHome.showView("imports"));
-    window.addEventListener("imports-changed", refresh);
+    window.addEventListener("imports-changed", event => {
+      if(event.detail?.deletedId){
+        ++revision;
+        documents=documents.filter(sourceDocument=>sourceDocument.file.id!==event.detail.deletedId);
+        render();
+      }
+      refresh();
+    });
     window.addEventListener("workspace-view", event => { if (event.detail === "monthly") refresh(); });
     refresh();
   }

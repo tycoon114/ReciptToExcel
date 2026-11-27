@@ -104,7 +104,16 @@ public class ImportAnalysis {
         return result;
     }
 
+    public synchronized void delete(String id) throws IOException {
+        files.delete(id);
+        // 조회 결과도 파일별 분석 JSON 안에 보관되므로 함께 제거됩니다.
+        Files.deleteIfExists(root.resolve(id + ".json"));
+    }
+
     public synchronized void saveCardReviews(Result expected, List<CardReview> reviews) throws IOException {
+        if (files.list().stream().noneMatch(file -> file.id().equals(expected.id())))
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                    "자료가 삭제되었습니다. 등록 자료 목록을 새로고침해 주세요.");
         var current = json.readValue(Files.readString(root.resolve(expected.id() + ".json")), Result.class);
         if (!current.analyzedAt().equals(expected.analyzedAt()) || !current.rows().equals(expected.rows()))
             throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,

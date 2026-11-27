@@ -2,7 +2,7 @@
 window.ImportHome=(()=>{
   const labels={CARD_PDF:"법인카드 내역",ACCOUNT_PDF:"계좌 입출금 내역",TAX_INVOICE:"세금계산서",RECEIPT_PHOTO:"영수증 사진"};
   const el=id=>document.getElementById(id);
-  let entries=[],busy=false;
+  let entries=[],busy=false,loadRevision=0;
   let analyses=new Map();
   const states={PENDING:"분석 대기",READY:"추출 완료",REVIEW:"원본 확인 필요",FAILED:"분석 실패",PHOTO_PENDING:"사진 처리 대기"};
   function message(text,error=false){el("import-status").textContent=text;el("import-status").hidden=false;el("import-status").classList.toggle("error",error);}
@@ -35,7 +35,11 @@ window.ImportHome=(()=>{
       }
       const cell=document.createElement("td"),link=document.createElement("a");
       link.textContent="원본 받기";link.className="text-button";link.href="/api/imports/"+encodeURIComponent(entry.id)+"/original";
-      cell.append(link);row.append(cell);body.append(row);
+      const remove=document.createElement("button");
+      remove.type="button";remove.className="text-button import-delete";remove.textContent="삭제";
+      remove.disabled=busy;remove.setAttribute("aria-label",entry.name+" 삭제");
+      remove.addEventListener("click",()=>removeEntry(entry).catch(error=>message(error.message,true)));
+      cell.className="import-file-actions";cell.append(link,remove);row.append(cell);body.append(row);
     }
     el("import-empty").hidden=visible.length>0;
     el("import-empty").textContent=selected?"이 종류로 등록한 자료가 없습니다.":"위에서 자료를 선택해 등록해 주세요.";
@@ -50,9 +54,24 @@ window.ImportHome=(()=>{
     return states[result.status]+(result.analyzedAt?" · "+result.rows.length+"건":"");
   }
   async function refresh(){
+    const current=++loadRevision;
     const [files,documents]=await Promise.all([api("/api/imports"),api("/api/imports/analysis")]);
+    if(current!==loadRevision)return;
     entries=files;analyses=new Map(documents.map(document=>[document.file.id,document.analysis]));render();
     window.dispatchEvent(new Event("imports-changed"));
+  }
+  async function removeEntry(entry){
+    if(busy)return;
+    if(!window.confirm(entry.name+"\n\n이 자료의 원본과 분석·조회 결과를 삭제합니다. 모든 해당 월의 결과와 앞으로 생성하는 엑셀에서도 제외됩니다. 삭제할까요?"))return;
+    lock(true);
+    try{
+      await api("/api/imports/"+encodeURIComponent(entry.id),{method:"DELETE"});
+      ++loadRevision;
+      entries=entries.filter(file=>file.id!==entry.id);analyses.delete(entry.id);render();
+      window.dispatchEvent(new CustomEvent("imports-changed",{detail:{deletedId:entry.id}}));
+      message(entry.name+" 자료를 삭제했습니다. 월별 결과에도 반영됩니다. 기존에 내려받은 엑셀은 다시 생성해 주세요.");
+      try{await refresh();}catch(error){message("자료는 삭제했지만 목록 갱신에 실패했습니다. 새로고침해 주세요. "+error.message,true);}
+    }finally{lock(false);}
   }
   function lock(value){
     busy=value;
