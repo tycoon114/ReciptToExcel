@@ -17,6 +17,7 @@ final class ImportWorkbook {
                     new Object[]{"합산 기준", "카드·계좌·세금계산서 간 거래 연결과 중복 제거는 후속 단계"},
                     new Object[]{"부가세", "카드 내역에 기존 공제 검토 규칙 적용 · 공제 후보는 세무사 확인 필요"},
                     new Object[]{"테스트 조회", "조회구분이 테스트 조회인 행은 가상 응답을 사용한 개발 자료"},
+                    new Object[]{"금액 검증", "카드・세금계산서의 공급가액＋부가세＝합계금액 확인 · 차이는 원본 통화 기준 · 일치해도 공제 가능을 뜻하지 않습니다."},
                     new Object[]{"빈칸", "확인하지 못했거나 원본에 없는 값 · 0원과 구분"},
                     new Object[]{"세금계산서", "매출·매입 미지정 문서는 거래 상대방 확인 필요 · 당사 사업자번호 출력 제외"},
                     new Object[]{"영수증 사진", "선택 자료 · 사진 연결 기능 준비 중"},
@@ -62,20 +63,20 @@ final class ImportWorkbook {
                     }
                     combined.add(append(new Object[]{row.date(), label(file.kind()), row.party(), row.amount(), row.supply(), row.vat(),
                             row.deposit(), row.withdrawal(), row.balance(), row.type(), row.reference(), row.originalReference(),
-                            row.businessNumber(), row.time(), row.currency(), row.description(), row.warning(), file.name(), location(row), file.id()}, tax));
+                            row.businessNumber(), row.time(), row.currency(), row.description(), row.warning(), file.name(), location(row), file.id()}, append(tax, amountCells(row, file.kind()))));
                     if (file.kind() == ImportFiles.Kind.CARD_PDF) cards.add(append(new Object[]{row.date(), row.time(), row.type(),
                             row.party(), row.businessNumber(), row.reference(), row.originalReference(), row.amount(), row.supply(), row.vat(),
-                            row.currency(), row.description(), row.warning(), file.name(), location(row), row.line(), file.id()}, tax));
+                            row.currency(), row.description(), row.warning(), file.name(), location(row), row.line(), file.id()}, append(tax, amountCells(row, file.kind()))));
                     if (file.kind() == ImportFiles.Kind.ACCOUNT_PDF) accounts.add(new Object[]{row.date(), row.time(), row.party(),
                             row.deposit(), row.withdrawal(), row.balance(), row.currency(), row.description(), row.warning(), file.name(), location(row), row.line(), file.id()});
-                    if (file.kind() == ImportFiles.Kind.TAX_INVOICE) invoices.add(new Object[]{row.type(), row.date(), row.party(),
+                    if (file.kind() == ImportFiles.Kind.TAX_INVOICE) invoices.add(append(new Object[]{row.type(), row.date(), row.party(),
                             row.businessNumber(), row.reference(), row.originalReference(), row.supply(), row.vat(), row.amount(), row.description(),
-                            row.warning(), file.name(), location(row), file.id()});
+                            row.warning(), file.name(), location(row), file.id()}, amountCells(row, file.kind())));
                 }
             }
             combined.sort(Comparator.comparing((Object[] row) -> row[0].toString().isEmpty() ? "9999-99-99" : row[0].toString())
                     .thenComparing(row -> row[1].toString()).thenComparing(row -> row[17].toString()));
-            write(book, "통합내역", new String[]{"거래일 / 작성일", "자료 종류", "거래처", "총액 / 이용금액", "공급가액", "부가세", "계좌 입금액", "계좌 출금액", "계좌 잔액", "거래 구분", "승인 / 문서번호", "원승인 / 원문서번호", "거래처 사업자번호", "시각", "통화", "적요 / 품목", "추출 확인사항", "원본 파일", "원본 위치", "자료 ID", "과세유형", "조회구분", "조회일시", "부가세 검토", "공제 후보 세액", "검토 사유", "검토 규칙버전"}, combined);
+            write(book, "통합내역", new String[]{"거래일 / 작성일", "자료 종류", "거래처", "총액 / 이용금액", "공급가액", "부가세", "계좌 입금액", "계좌 출금액", "계좌 잔액", "거래 구분", "승인 / 문서번호", "원승인 / 원문서번호", "거래처 사업자번호", "시각", "통화", "적요 / 품목", "추출 확인사항", "원본 파일", "원본 위치", "자료 ID", "과세유형", "조회구분", "조회일시", "부가세 검토", "공제 후보 세액", "검토 사유", "검토 규칙버전", "금액 검증", "금액 차이 (공급가액+부가세-합계)", "금액 검증 사유", "취소·수정 안내"}, combined);
             var summary = new ArrayList<Object[]>(List.of(
                     new Object[]{"조회 범위", month.isEmpty() ? "등록 자료 전체" : month, "거래일 기준 · 카드 내역만 집계"},
                     new Object[]{"조회 출처", "테스트 " + tested + "건 / 실제 " + live + "건", tested > 0 ? "테스트 응답 포함 · 실제 신고·제출용 금액이 아닙니다." : "실제 조회 여부와 검토 사유를 거래별로 확인하세요."},
@@ -96,9 +97,9 @@ final class ImportWorkbook {
             book.setSheetOrder("카드 부가세 검토", 1);
             book.setSheetOrder("통합내역", 2);
             book.setActiveSheet(0); book.setSelectedTab(0);
-            write(book, "카드내역", new String[]{"사용일자", "시각", "구분", "가맹점", "거래처 사업자번호", "승인번호", "원승인번호", "이용금액", "공급가액", "부가세", "통화", "적요", "추출 확인사항", "원본 파일", "페이지 / 시트", "원본 행", "자료 ID", "과세유형", "조회구분", "조회일시", "부가세 검토", "공제 후보 세액", "검토 사유", "검토 규칙버전"}, cards);
+            write(book, "카드내역", new String[]{"사용일자", "시각", "구분", "가맹점", "거래처 사업자번호", "승인번호", "원승인번호", "이용금액", "공급가액", "부가세", "통화", "적요", "추출 확인사항", "원본 파일", "페이지 / 시트", "원본 행", "자료 ID", "과세유형", "조회구분", "조회일시", "부가세 검토", "공제 후보 세액", "검토 사유", "검토 규칙버전", "금액 검증", "금액 차이 (공급가액+부가세-합계)", "금액 검증 사유", "취소·수정 안내"}, cards);
             write(book, "계좌입출금", new String[]{"거래일자", "시각", "거래 상대방", "입금액", "출금액", "거래 후 잔액", "통화", "적요", "추출 확인사항", "원본 파일", "페이지 / 시트", "원본 행", "자료 ID"}, accounts);
-            write(book, "세금계산서", new String[]{"매출·매입", "작성일자", "거래처", "거래처 사업자번호", "문서 번호", "원문서 번호", "공급가액", "부가세", "합계금액", "품목·수정 사유", "추출 확인사항", "원본 파일", "페이지 / 시트", "자료 ID"}, invoices);
+            write(book, "세금계산서", new String[]{"매출·매입", "작성일자", "거래처", "거래처 사업자번호", "문서 번호", "원문서 번호", "공급가액", "부가세", "합계금액", "품목·수정 사유", "추출 확인사항", "원본 파일", "페이지 / 시트", "자료 ID", "금액 검증", "금액 차이 (공급가액+부가세-합계)", "금액 검증 사유", "취소·수정 안내"}, invoices);
             write(book, "처리현황", new String[]{"원본 파일", "자료 종류", "분석 상태", "범위 내 추출 건수", "분석일시", "확인 페이지", "안내", "자료 ID"}, states);
             book.write(out);
             return out.toByteArray();
@@ -132,6 +133,13 @@ final class ImportWorkbook {
 
     static boolean included(ImportAnalysis.Transaction row, String month) { return month.isEmpty() || row.date().startsWith(month + "-"); }
     private static String reviewKey(int page, int line, String sheet) { return page + "/" + line + "/" + Objects.toString(sheet, ""); }
+    private static Object[] amountCells(ImportAnalysis.Transaction row, ImportFiles.Kind kind) {
+        if (kind != ImportFiles.Kind.CARD_PDF && kind != ImportFiles.Kind.TAX_INVOICE)
+            return new Object[]{"", null, "", ""};
+        var result = row.amountValidation();
+        return new Object[]{result.label(), result.difference(), result.reason(), result.notice()};
+    }
+
     private static Object[] taxCells(ImportAnalysis.CardReview tax, boolean card) {
         if (!card) return new Object[]{"", "", "", "", null, "", ""};
         if (tax == null) return new Object[]{"미조회", "미조회", "", "확인 필요", null, "카드 과세유형·부가세 검토를 실행해 주세요.", ""};

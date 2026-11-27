@@ -23,6 +23,9 @@ public class ImportAnalysis {
             this(page, line, date, time, party, businessNumber, type, reference, originalReference, amount, supply, vat,
                     deposit, withdrawal, balance, description, currency, warning, "");
         }
+        @com.fasterxml.jackson.annotation.JsonProperty(value = "amountValidation", access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+        public ImportAmountValidation.Result amountValidation() { return ImportAmountValidation.evaluate(this); }
+
         Transaction inSheet(String name) {
             return new Transaction(page, line, date, time, party, businessNumber, type, reference, originalReference,
                     amount, supply, vat, deposit, withdrawal, balance, description, currency, warning, name);

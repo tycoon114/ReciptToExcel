@@ -26,6 +26,7 @@ window.MonthlyResults = (() => {
       (monthlyExport?"선택한 월의 내역이 0건이라 엑셀을 만들 수 없습니다.":"추출 내역이 0건이라 엑셀을 만들 수 없습니다. 등록 자료를 분석해 주세요."):
       "일부 자료가 없어도 다운로드할 수 있습니다. 통합내역과 자료별 시트를 함께 저장합니다.";
     renderRegistration(valid);
+    renderAmountValidation(valid);
     const kindRows = kind => documents.filter(sourceDocument=> sourceDocument.file.kind === kind && sourceDocument.analysis.analyzedAt)
       .flatMap(sourceDocument=> sourceDocument.analysis.rows).filter(row => valid && row.date.startsWith(monthInput.value + "-"));
     function amount(id, kind, key) {
@@ -91,6 +92,34 @@ window.MonthlyResults = (() => {
     el("results-review-empty").textContent = documents.some(sourceDocument=> sourceDocument.analysis.analyzedAt)
       ? "등록 자료에서 보고된 추출 오류가 없습니다. 원본과 추출 내용을 확인해 주세요."
       : "자료 가져오기에서 ‘등록 자료 분석’을 실행해 주세요.";
+  }
+  function renderAmountValidation(valid){
+    const items=documents.filter(sourceDocument=>["CARD_PDF","TAX_INVOICE"].includes(sourceDocument.file.kind))
+      .flatMap(sourceDocument=>sourceDocument.analysis.rows.filter(row=>valid && row.date.startsWith(monthInput.value+"-"))
+        .map(row=>({row,file:sourceDocument.file,check:row.amountValidation})));
+    const count=code=>items.filter(item=>item.check?.code===code).length;
+    const notices=items.filter(item=>item.check?.notice).length;
+    el("results-amount-summary").textContent=`총 ${items.length}건 · 일치 ${count("MATCH")}건 · 불일치 ${count("MISMATCH")}건 · 정보 부족 ${count("MISSING")}건 · 기타 확인 ${items.filter(item=>!item.check || item.check.code==="OUT_OF_RANGE").length}건 · 취소/수정 안내 ${notices}건`;
+    const selected=items.filter(item=>el("results-amount-filter").value!=="review" || item.check?.code!=="MATCH" || item.check?.notice)
+      .sort((a,b)=>a.row.date.localeCompare(b.row.date));
+    const body=el("results-amount-rows");body.replaceChildren();
+    const money=value=>value==null?"미기재":value.toLocaleString("ko-KR");
+    for(const {row,file,check} of selected.slice(0,200)){
+      const tr=document.createElement("tr");
+      const place=file.name+" · "+(row.sheet?row.sheet+" · ":row.page+"쪽 · ")+row.line+"행";
+      const values=[row.date,file.kind==="CARD_PDF"?"법인카드":"세금계산서 · "+(row.type || "구분 미확인"),row.party,
+        money(row.supply),money(row.vat),money(row.amount),row.currency || "미확인",check?.label || "검증 결과 없음",
+        check?.difference==null?"—":money(check.difference),check?[check.reason,check.notice].filter(Boolean).join(" · "):"프로그램을 재시작한 뒤 다시 확인해 주세요.",place];
+      values.forEach((value,index)=>{
+        const td=document.createElement("td");td.textContent=value;
+        if(index===7 && check?.code!=="MATCH")td.className="amount-check-review";
+        tr.append(td);
+      });body.append(tr);
+    }
+    const empty=el("results-amount-empty");
+    empty.hidden=selected.length>0 && selected.length<=200;
+    empty.textContent=selected.length>200?`${selected.length}건 중 200건 표시 · 전체 검증 결과는 엑셀에서 확인하세요.`:
+      items.length?"현재 표시 조건에 해당하는 내역이 없습니다.":"선택한 월에 검증할 카드·세금계산서 내역이 없습니다.";
   }
   function renderRegistration(valid){
     const body=el("results-registration-rows");body.replaceChildren();
@@ -182,6 +211,7 @@ window.MonthlyResults = (() => {
   function init() {
     setMonth(now.getFullYear(), now.getMonth() + 1);
     monthInput.addEventListener("change", render);
+    el("results-amount-filter").addEventListener("change",render);
     el("results-test-lookup").addEventListener("click",applyTestLookup);
     el("results-clear-test-lookup").addEventListener("click",clearTestLookup);
     el("results-export-scope").addEventListener("change", render);
