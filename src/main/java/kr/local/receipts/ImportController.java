@@ -16,7 +16,8 @@ public class ImportController {
     public ImportController(ImportFiles files, ImportAnalysis analysis) { this.files = files; this.analysis = analysis; }
     @GetMapping public List<ImportFiles.Entry> list() throws IOException { return files.list(); }
     @PostMapping public ImportFiles.Entry upload(@RequestParam("kind") ImportFiles.Kind kind,
-            @RequestParam("file") MultipartFile file) throws IOException { return files.upload(kind, file); }
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(defaultValue = "") String invoiceDirection) throws IOException { return files.upload(kind, file, invoiceDirection); }
     @GetMapping("/analysis") public List<ImportAnalysis.Document> analysis() throws IOException { return analysis.list(); }
     @PostMapping("/{id}/analyze") public ImportAnalysis.Result analyze(@PathVariable String id) throws IOException { return analysis.analyze(id); }
     @GetMapping("/export.xlsx") public ResponseEntity<byte[]> export(@RequestParam(required = false) String month) throws IOException {

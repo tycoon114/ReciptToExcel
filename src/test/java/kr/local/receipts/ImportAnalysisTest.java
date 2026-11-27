@@ -50,7 +50,9 @@ class ImportAnalysisTest {
         assertEquals(27, restored.stream().mapToInt(document -> document.analysis().rows().size()).sum());
         byte[] workbook = ImportWorkbook.create(restored, "");
         try (var book = new XSSFWorkbook(new ByteArrayInputStream(workbook))) {
-            assertEquals(5, book.getNumberOfSheets());
+            assertEquals(6, book.getNumberOfSheets());
+            assertEquals("통합내역", book.getSheetAt(0).getSheetName());
+            assertEquals(27, book.getSheet("통합내역").getLastRowNum());
             assertEquals(8, book.getSheet("카드내역").getLastRowNum());
             assertEquals(13, book.getSheet("계좌입출금").getLastRowNum());
             assertEquals(6, book.getSheet("세금계산서").getLastRowNum());

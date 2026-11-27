@@ -1,6 +1,6 @@
 "use strict";
 window.ImportHome=(()=>{
-  const labels={CARD_PDF:"법인카드 PDF",ACCOUNT_PDF:"계좌 입출금 PDF",TAX_INVOICE:"세금계산서",RECEIPT_PHOTO:"영수증 사진"};
+  const labels={CARD_PDF:"법인카드 내역",ACCOUNT_PDF:"계좌 입출금 내역",TAX_INVOICE:"세금계산서",RECEIPT_PHOTO:"영수증 사진"};
   const el=id=>document.getElementById(id);
   let entries=[],busy=false;
   let analyses=new Map();
@@ -40,11 +40,12 @@ window.ImportHome=(()=>{
     el("import-empty").hidden=visible.length>0;
     el("import-empty").textContent=selected?"이 종류로 등록한 자료가 없습니다.":"위에서 자료를 선택해 등록해 주세요.";
     el("import-count").textContent=visible.length+"개";
-    el("import-analyze").disabled=busy || !entries.some(entry=>entry.mediaType==="application/pdf");
+    el("import-analyze").disabled=busy || !entries.some(analyzable);
   }
+  function analyzable(entry){return ["application/pdf","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(entry.mediaType);}
   function status(entry){
     const result=analyses.get(entry.id);
-    if(!result)return entry.mediaType==="application/pdf"?"분석 대기":"사진 처리 대기";
+    if(!result)return analyzable(entry)?"분석 대기":"사진 처리 대기";
     return states[result.status]+(result.analyzedAt?" · "+result.rows.length+"건":"");
   }
   async function refresh(){
@@ -55,12 +56,13 @@ window.ImportHome=(()=>{
   function lock(value){
     busy=value;
     document.querySelectorAll("[data-import-kind]").forEach(input=>input.disabled=value);
+    el("invoice-import-direction").disabled=value;
     el("import-refresh").disabled=value;
     render();
   }
   async function analyze(){
     if(busy)return;
-    const documents=entries.filter(entry=>entry.mediaType==="application/pdf");
+    const documents=entries.filter(analyzable);
     lock(true);let ready=0;const errors=[];
     el("import-analyze").textContent="분석 중…";
     try{
@@ -70,7 +72,7 @@ window.ImportHome=(()=>{
           const result=await api("/api/imports/"+encodeURIComponent(file.id)+"/analyze",{method:"POST"});
           analyses.set(file.id,result);render();
           if(result.status==="READY")ready++;
-          else errors.push(file.name+" · "+result.issues.map(issue=>(issue.page?issue.page+"쪽 · ":"")+issue.message).join(" / "));
+          else errors.push(file.name+" · "+result.issues.map(issue=>(issue.sheet?issue.sheet+" · ":issue.page?issue.page+"쪽 · ":"")+issue.message).join(" / "));
         }catch(error){errors.push(file.name+" · "+error.message);}
       }
       message(`분석 완료 ${ready}/${documents.length}개. 월별 결과에서 엑셀을 만들 수 있습니다.`+(errors.length?"\n"+errors.join("\n"):""),errors.length>0);
@@ -81,6 +83,7 @@ window.ImportHome=(()=>{
     if(busy || !input.files.length)return;
     lock(true);
     const files=Array.from(input.files),kind=input.dataset.importKind;
+    const direction=kind==="TAX_INVOICE"?el("invoice-import-direction").value:"";
     const inputs=Array.from(document.querySelectorAll("[data-import-kind]"));
     inputs.forEach(node=>node.disabled=true);
     let saved=0;const errors=[];
@@ -90,6 +93,7 @@ window.ImportHome=(()=>{
         message(`${i+1}/${files.length} · ${file.name} 등록 중…`);
         if(file.size>limit*1024*1024){errors.push(file.name+` · ${limit}MB를 초과했습니다.`);continue;}
         const data=new FormData();data.append("kind",kind);data.append("file",file);
+        data.append("invoiceDirection",direction);
         try{const entry=await api("/api/imports",{method:"POST",body:data});entries.unshift(entry);saved++;render();}
         catch(error){errors.push(file.name+" · "+error.message);}
       }

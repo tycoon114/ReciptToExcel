@@ -12,23 +12,23 @@
 </aside>
 <main><nav class="workspace-mobile-nav" aria-label="작업 화면"><button type="button" id="mobile-imports" class="button nav-active">자료 가져오기</button><button type="button" id="mobile-monthly" class="button">월별 결과</button><button type="button" id="mobile-legacy" class="button">기존 장부</button></nav>
 <section id="import-home" aria-labelledby="import-title">
-<header class="import-header"><div><h1 id="import-title">자료 가져오기</h1><p>카드·계좌·세금계산서 자료와 영수증 사진을 등록하세요.</p></div><div class="header-actions"><button type="button" id="import-refresh" class="button">새로고침</button><div class="pending-action"><button type="button" id="import-analyze" class="button primary" disabled aria-describedby="import-analyze-help">등록 자료 분석</button><p id="import-analyze-help">등록한 PDF에서 거래를 추출합니다. 다시 분석하면 파일별 결과를 갱신합니다.</p></div></div></header>
+<header class="import-header"><div><h1 id="import-title">자료 가져오기</h1><p>카드·계좌·세금계산서 자료와 영수증 사진을 등록하세요.</p></div><div class="header-actions"><button type="button" id="import-refresh" class="button">새로고침</button><div class="pending-action"><button type="button" id="import-analyze" class="button primary" disabled aria-describedby="import-analyze-help">등록 자료 분석</button><p id="import-analyze-help">등록한 PDF·엑셀에서 거래를 추출합니다. 다시 분석하면 파일별 결과를 갱신합니다.</p></div></div></header>
 <div class="import-grid">
-<section class="import-card"><h2>법인카드 PDF</h2><p>법인카드의 승인·사용내역 문서 PDF를 등록하세요.</p><label>카드 사용내역 선택<input type="file" data-import-kind="CARD_PDF" accept=".pdf,application/pdf" multiple></label></section>
-<section class="import-card"><h2>계좌 입출금 PDF</h2><p>입금과 출금이 포함된 계좌 거래내역 문서 PDF를 등록하세요.</p><label>계좌 거래내역 선택<input type="file" data-import-kind="ACCOUNT_PDF" accept=".pdf,application/pdf" multiple></label></section>
-<section class="import-card"><h2>세금계산서</h2><p>공급자와 공급받는 자, 공급가액·세액이 있는 자료를 등록하세요.</p><label>세금계산서 선택<input type="file" data-import-kind="TAX_INVOICE" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple></label></section>
+<section class="import-card"><h2>법인카드 내역</h2><p>법인카드의 승인·사용내역 PDF 또는 엑셀을 등록하세요.</p><label>카드 사용내역 선택<input type="file" data-import-kind="CARD_PDF" accept=".pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" multiple></label></section>
+<section class="import-card"><h2>계좌 입출금 내역</h2><p>전체 입출금이 포함된 계좌 거래내역 PDF 또는 엑셀을 등록하세요.</p><label>계좌 거래내역 선택<input type="file" data-import-kind="ACCOUNT_PDF" accept=".pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" multiple></label></section>
+<section class="import-card"><h2>세금계산서</h2><p>공급가액·세액이 있는 PDF·엑셀 또는 사진을 등록하세요.</p><label for="invoice-import-direction">세금계산서 구분</label><select id="invoice-import-direction"><option value="">자료의 매출·매입 구분 사용</option><option value="매입">매입 · 받은 세금계산서</option><option value="매출">매출 · 발행한 세금계산서</option></select><label>세금계산서 선택<input type="file" data-import-kind="TAX_INVOICE" accept=".pdf,.xlsx,.xls,.jpg,.jpeg,.png,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,image/jpeg,image/png" multiple></label></section>
 <section class="import-card"><h2>영수증 사진</h2><p>거래 옆에 붙일 증빙 사진을 등록하세요. 날짜·금액은 이후 매칭 단계에서 확인합니다.</p><label>영수증 사진 선택<input type="file" data-import-kind="RECEIPT_PHOTO" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple></label></section>
 </div>
-<p class="import-note">PDF는 파일당 25MB·100쪽, 사진은 10MB까지 등록할 수 있습니다. 카드·계좌 자료는 글자를 선택할 수 있는 문서 PDF로 준비해 주세요.</p>
+<p class="import-note">PDF·엑셀은 파일당 25MB, 사진은 10MB까지 등록할 수 있습니다. PDF는 글자를 선택할 수 있는 문서로, 엑셀은 XLSX·XLS로 준비해 주세요. PDF 최대 100쪽 · 엑셀 최대 100시트·시트당 100,000행.</p>
 <div id="import-status" class="notice import-status" role="status" hidden></div>
 <section class="ledger-section" aria-labelledby="import-list-title">
-<div class="section-heading"><div><h2 id="import-list-title">등록한 자료 <span id="import-count">0개</span></h2><p>PDF를 등록한 뒤 등록 자료 분석을 실행하세요. 추출 확인사항은 월별 결과와 엑셀에 표시됩니다.</p></div></div>
-<div class="import-toolbar"><label>자료 종류<select id="import-kind-filter"><option value="">전체</option><option value="CARD_PDF">법인카드 PDF</option><option value="ACCOUNT_PDF">계좌 입출금 PDF</option><option value="TAX_INVOICE">세금계산서</option><option value="RECEIPT_PHOTO">영수증 사진</option></select></label></div>
+<div class="section-heading"><div><h2 id="import-list-title">등록한 자료 <span id="import-count">0개</span></h2><p>PDF·엑셀을 등록한 뒤 등록 자료 분석을 실행하세요. 추출 확인사항은 월별 결과와 엑셀에 표시됩니다.</p></div></div>
+<div class="import-toolbar"><label>자료 종류<select id="import-kind-filter"><option value="">전체</option><option value="CARD_PDF">법인카드 내역</option><option value="ACCOUNT_PDF">계좌 입출금 내역</option><option value="TAX_INVOICE">세금계산서</option><option value="RECEIPT_PHOTO">영수증 사진</option></select></label></div>
 <div class="table-scroll"><table class="import-table"><thead><tr><th>파일명</th><th>자료 종류</th><th>쪽 수 / 크기</th><th>등록일시</th><th>처리 상태</th><th>원본</th></tr></thead><tbody id="import-rows"></tbody></table></div>
 <p id="import-empty" class="import-empty">자료 목록을 불러오고 있습니다.</p>
 </section></section>
 <section id="monthly-results" hidden aria-labelledby="results-title">
-<header><div><h1 id="results-title" tabindex="-1">월별 결과</h1><p>월별 거래와 부가세 검토 현황을 확인하세요.</p></div><div class="header-actions"><div class="pending-action"><button type="button" id="results-export" class="button primary" disabled aria-describedby="results-export-help">엑셀 만들기</button><p id="results-export-help">자료별 추출 내역을 한 엑셀에 저장합니다. 분석 후 사용할 수 있습니다.</p></div></div></header>
+<header><div><h1 id="results-title" tabindex="-1">월별 결과</h1><p>월별 거래와 부가세 검토 현황을 확인하세요.</p></div><div class="header-actions"><div class="pending-action"><button type="button" id="results-export" class="button primary" disabled aria-describedby="results-export-help">엑셀 만들기</button><p id="results-export-help">통합내역과 개발 대조용 자료별 시트를 한 엑셀에 저장합니다.</p></div></div></header>
 <div class="month-picker" role="group" aria-label="조회 월 선택">
 <label for="results-month">조회 월</label><button type="button" id="results-previous" class="button" aria-label="이전 달">←</button><input id="results-month" type="month" min="1900-01" max="9999-12" required><button type="button" id="results-next" class="button" aria-label="다음 달">→</button><button type="button" id="results-current" class="button">이번 달</button>
 </div>

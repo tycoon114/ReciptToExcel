@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.*;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,7 +17,7 @@ import tools.jackson.databind.ObjectMapper;
 public class ImportFiles {
     public enum Kind { CARD_PDF, ACCOUNT_PDF, TAX_INVOICE, RECEIPT_PHOTO }
     public record Entry(String id, Kind kind, String name, long size, String mediaType,
-                        int pages, String uploadedAt) {}
+                        int pages, String uploadedAt, String invoiceDirection) {}
     private final Path root;
     private final ObjectMapper json;
 
@@ -38,15 +39,32 @@ public class ImportFiles {
     }
 
     public Entry upload(Kind kind, MultipartFile file) throws IOException {
+        return upload(kind, file, "");
+    }
+
+    public Entry upload(Kind kind, MultipartFile file, String invoiceDirection) throws IOException {
+        if (!Set.of("", "매입", "매출").contains(invoiceDirection)) throw ReceiptService.bad("세금계산서의 매출·매입 구분을 확인해 주세요.");
         if (file.isEmpty() || file.getSize() > 25L * 1024 * 1024)
             throw ReceiptService.bad("파일은 25MB 이하로 선택해 주세요.");
         byte[] bytes = file.getBytes();
         String name = Objects.toString(file.getOriginalFilename(), "자료").replace('\\', '/');
         name = name.substring(name.lastIndexOf('/') + 1);
         boolean pdf = name.toLowerCase(Locale.ROOT).endsWith(".pdf");
+        boolean excel = name.toLowerCase(Locale.ROOT).matches(".*\\.(xlsx|xls)$");
         int pages = 0;
         String mediaType;
-        if (kind == Kind.CARD_PDF || kind == Kind.ACCOUNT_PDF || pdf) {
+        if (excel) {
+            if (kind == Kind.RECEIPT_PHOTO) throw ReceiptService.bad("영수증 사진에는 JPG 또는 PNG를 올려 주세요.");
+            try (var book = WorkbookFactory.create(new java.io.ByteArrayInputStream(bytes))) {
+                if (book.getNumberOfSheets() == 0 || book.getNumberOfSheets() > 100)
+                    throw ReceiptService.bad("엑셀은 1~100개 시트까지 등록할 수 있습니다.");
+                for (var sheet : book) if (sheet.getLastRowNum() >= 100000)
+                    throw ReceiptService.bad("엑셀은 시트당 100,000행까지 등록할 수 있습니다.");
+            } catch (org.springframework.web.server.ResponseStatusException e) { throw e; }
+            catch (Exception e) { throw ReceiptService.bad("엑셀을 읽지 못했습니다. 암호를 해제한 XLSX 또는 XLS 파일인지 확인해 주세요."); }
+            mediaType = name.toLowerCase(Locale.ROOT).endsWith(".xlsx")
+                    ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/vnd.ms-excel";
+        } else if (kind == Kind.CARD_PDF || kind == Kind.ACCOUNT_PDF || pdf) {
             if (!pdf || kind == Kind.RECEIPT_PHOTO) throw ReceiptService.bad("이 항목에는 PDF를 올려 주세요.");
             try (var document = Loader.loadPDF(bytes)) {
                 if (document.isEncrypted()) throw ReceiptService.bad("암호를 해제한 PDF를 올려 주세요.");
@@ -82,7 +100,8 @@ public class ImportFiles {
                     ? "image/jpeg" : "image/png";
         }
         String id = UUID.randomUUID().toString();
-        var entry = new Entry(id, kind, name, bytes.length, mediaType, pages, Instant.now().toString());
+        var entry = new Entry(id, kind, name, bytes.length, mediaType, pages, Instant.now().toString(),
+                kind == Kind.TAX_INVOICE ? invoiceDirection : "");
         Path original = root.resolve(id + ".bin");
         Path temp = Files.createTempFile(root, "pending-", ".tmp");
         try {

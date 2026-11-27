@@ -36,7 +36,7 @@ window.MonthlyResults = (() => {
     for (const document of documents) {
       for (const issue of document.analysis.issues) {
         const item = document.createElement("li");
-        item.textContent = document.file.name + (issue.page ? ` · ${issue.page}쪽` : "") + " · " + issue.message;
+        item.textContent = document.file.name + (issue.sheet ? ` · ${issue.sheet}` : issue.page ? ` · ${issue.page}쪽` : "") + " · " + issue.message;
         detail.append(item);
       }
     }
