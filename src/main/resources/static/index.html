@@ -20,6 +20,7 @@
 <section class="import-card"><h2>영수증 사진</h2><p>거래 옆에 붙일 증빙 사진을 등록하세요. 날짜·금액은 이후 매칭 단계에서 확인합니다.</p><label>영수증 사진 선택<input type="file" data-import-kind="RECEIPT_PHOTO" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple></label></section>
 </div>
 <p class="import-note">PDF·엑셀은 파일당 25MB, 사진은 10MB까지 등록할 수 있습니다. PDF는 글자를 선택할 수 있는 문서로, 엑셀은 XLSX·XLS로 준비해 주세요. PDF 최대 100쪽 · 엑셀 최대 100시트·시트당 100,000행.</p>
+<section class="ledger-section" aria-label="카드 과세유형과 부가세 검토"><div class="section-heading"><div><h2>카드 과세유형·부가세 검토</h2><p>자료 분석 후 실행하세요. 실제 조회는 국세청 연결 설정의 키를 사용합니다. 재분석 후에는 검토를 다시 실행해 주세요.</p></div></div><div class="import-toolbar"><label>조회 방식<select id="import-vat-mode"><option value="LIVE">국세청 실제 조회</option><option value="TEST">테스트 조회 · 가상 샘플용</option></select></label><button type="button" class="button" id="import-vat-review" disabled>카드 과세유형·부가세 검토</button></div></section>
 <div id="import-status" class="notice import-status" role="status" hidden></div>
 <section class="ledger-section" aria-labelledby="import-list-title">
 <div class="section-heading"><div><h2 id="import-list-title">등록한 자료 <span id="import-count">0개</span></h2><p>PDF·엑셀을 등록한 뒤 등록 자료 분석을 실행하세요. 추출 확인사항은 월별 결과와 엑셀에 표시됩니다.</p></div></div>
@@ -33,7 +34,7 @@
 <label for="results-month">조회 월</label><button type="button" id="results-previous" class="button" aria-label="이전 달">←</button><input id="results-month" type="month" min="1900-01" max="9999-12" required><button type="button" id="results-next" class="button" aria-label="다음 달">→</button><button type="button" id="results-current" class="button">이번 달</button>
 </div>
 <div id="results-error" class="notice error" role="alert" hidden></div><label for="results-export-scope">엑셀 범위</label><select id="results-export-scope" class="results-export-scope"><option value="all">등록 자료 전체</option><option value="month">선택한 월</option></select><h2 id="results-period" class="results-period" aria-live="polite"></h2>
-<p class="results-note">자료별 사용일·입출금일·작성일 기준입니다. 금액은 추출된 원화 행의 합계입니다. 누락·통화 미확인 행과 처리현황을 확인해 주세요. 거래 간 대조·부가세 공제 검토·사진 연결은 준비 중입니다.</p>
+<p class="results-note">자료별 사용일·입출금일·작성일 기준입니다. 금액은 추출된 원화 행의 합계입니다. 누락·통화 미확인 행과 처리현황을 확인해 주세요. 카드 부가세 검토는 별도 실행하며, 거래 간 대조·사진 연결은 준비 중입니다.</p>
 <section class="results-section" aria-labelledby="results-transactions-title">
 <h2 id="results-transactions-title">거래 현황</h2>
 <div class="results-grid">
@@ -44,11 +45,11 @@
 </div>
 </section>
 <section class="results-section" aria-labelledby="results-tax-title">
-<h2 id="results-tax-title">부가세 검토</h2>
+<h2 id="results-tax-title">카드 부가세 검토</h2><p class="results-note" id="results-vat-source"></p>
 <div class="results-grid results-tax">
-<article class="result-card"><h3>공제 대상 부가세</h3><strong aria-label="집계 대기">—</strong><p>공제 검토 결과에 따른 세액</p></article>
-<article class="result-card"><h3>공제 제외 부가세</h3><strong aria-label="집계 대기">—</strong><p>제외 사유가 확인된 세액</p></article>
-<article class="result-card"><h3>검토 필요</h3><strong aria-label="집계 대기">—</strong><p>사업자 미조회·판단 보류 내역</p></article>
+<article class="result-card"><h3>공제 후보 부가세</h3><strong id="results-vat-candidate">—</strong><p>공제 검토 결과에 따른 세액</p></article>
+<article class="result-card"><h3>불공제 검토 세액</h3><strong id="results-vat-excluded">—</strong><p>제외 사유가 확인된 세액</p></article>
+<article class="result-card"><h3>검토 필요</h3><strong id="results-vat-pending">—</strong><p>사업자 미조회·판단 보류 내역</p></article>
 </div>
 </section>
 <section class="results-review" aria-labelledby="results-review-title">

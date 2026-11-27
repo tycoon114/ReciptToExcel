@@ -41,6 +41,7 @@ window.ImportHome=(()=>{
     el("import-empty").textContent=selected?"이 종류로 등록한 자료가 없습니다.":"위에서 자료를 선택해 등록해 주세요.";
     el("import-count").textContent=visible.length+"개";
     el("import-analyze").disabled=busy || !entries.some(analyzable);
+    el("import-vat-review").disabled=busy || !entries.some(entry=>entry.kind==="CARD_PDF" && analyses.get(entry.id)?.rows.length);
   }
   function analyzable(entry){return ["application/pdf","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(entry.mediaType);}
   function status(entry){
@@ -57,6 +58,7 @@ window.ImportHome=(()=>{
     busy=value;
     document.querySelectorAll("[data-import-kind]").forEach(input=>input.disabled=value);
     el("invoice-import-direction").disabled=value;
+    el("import-vat-mode").disabled=value;
     el("import-refresh").disabled=value;
     render();
   }
@@ -78,6 +80,16 @@ window.ImportHome=(()=>{
       message(`분석 완료 ${ready}/${documents.length}개. 월별 결과에서 엑셀을 만들 수 있습니다.`+(errors.length?"\n"+errors.join("\n"):""),errors.length>0);
       await refresh();
     }finally{lock(false);el("import-analyze").textContent="등록 자료 분석";}
+  }
+  async function reviewCardVat(){
+    if(busy)return;
+    const mode=el("import-vat-mode").value;
+    lock(true);
+    message(mode==="TEST"?"테스트 조회로 카드 부가세 검토 중…":"국세청 과세유형 조회 및 카드 부가세 검토 중…");
+    try{
+      await api("/api/imports/card-vat?mode="+encodeURIComponent(mode),{method:"POST"});
+      message((mode==="TEST"?"테스트 조회":"국세청 실제 조회")+" 검토가 끝났습니다. 월별 결과와 통합내역 엑셀에서 확인하세요.");
+    }finally{try{await refresh();}finally{lock(false);}}
   }
   async function upload(input){
     if(busy || !input.files.length)return;
@@ -110,6 +122,7 @@ window.ImportHome=(()=>{
     el("legacy-back").addEventListener("click",()=>showView("imports"));
     el("import-refresh").addEventListener("click",()=>refresh().catch(error=>message(error.message,true)));
     el("import-analyze").addEventListener("click",()=>analyze().catch(error=>message(error.message,true)));
+    el("import-vat-review").addEventListener("click",()=>reviewCardVat().catch(error=>message(error.message,true)));
     el("import-kind-filter").addEventListener("change",render);
     document.querySelectorAll("[data-import-kind]").forEach(input=>input.addEventListener("change",()=>upload(input).catch(error=>message(error.message,true))));
     showView("imports");

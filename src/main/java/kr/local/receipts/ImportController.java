@@ -13,12 +13,20 @@ import org.springframework.web.multipart.MultipartFile;
 public class ImportController {
     private final ImportFiles files;
     private final ImportAnalysis analysis;
+    private ImportCardVat cardVat;
     public ImportController(ImportFiles files, ImportAnalysis analysis) { this.files = files; this.analysis = analysis; }
+    @org.springframework.beans.factory.annotation.Autowired
+    public ImportController(ImportFiles files, ImportAnalysis analysis, ImportCardVat cardVat) {
+        this(files, analysis); this.cardVat = cardVat;
+    }
     @GetMapping public List<ImportFiles.Entry> list() throws IOException { return files.list(); }
     @PostMapping public ImportFiles.Entry upload(@RequestParam("kind") ImportFiles.Kind kind,
             @RequestParam("file") MultipartFile file,
             @RequestParam(defaultValue = "") String invoiceDirection) throws IOException { return files.upload(kind, file, invoiceDirection); }
     @GetMapping("/analysis") public List<ImportAnalysis.Document> analysis() throws IOException { return analysis.list(); }
+    @PostMapping("/card-vat") public List<ImportAnalysis.Document> cardVat(@RequestParam(defaultValue = "LIVE") String mode) throws IOException {
+        return cardVat.review(mode);
+    }
     @PostMapping("/{id}/analyze") public ImportAnalysis.Result analyze(@PathVariable String id) throws IOException { return analysis.analyze(id); }
     @GetMapping("/export.xlsx") public ResponseEntity<byte[]> export(@RequestParam(required = false) String month) throws IOException {
         String selected = ImportAnalysis.month(month);

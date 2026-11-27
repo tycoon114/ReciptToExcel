@@ -15,7 +15,8 @@ final class ImportWorkbook {
                     new Object[]{"자료 성격", "PDF·엑셀 원본에서 추출한 대조용 내역 · 원본 확인 후 사용"},
                     new Object[]{"통합내역", "카드·계좌·세금계산서를 날짜순으로 모은 내역 · 자료별 시트는 개발 대조용"},
                     new Object[]{"합산 기준", "카드·계좌·세금계산서 간 거래 연결과 중복 제거는 후속 단계"},
-                    new Object[]{"부가세", "표시 세액은 원본 추출값 · 공제 판정 및 환급 계산 연결 전"},
+                    new Object[]{"부가세", "카드 내역에 기존 공제 검토 규칙 적용 · 공제 후보는 세무사 확인 필요"},
+                    new Object[]{"테스트 조회", "조회구분이 테스트 조회인 행은 가상 응답을 사용한 개발 자료"},
                     new Object[]{"빈칸", "확인하지 못했거나 원본에 없는 값 · 0원과 구분"},
                     new Object[]{"세금계산서", "매출·매입 미지정 문서는 거래 상대방 확인 필요 · 당사 사업자번호 출력 제외"},
                     new Object[]{"영수증 사진", "선택 자료 · 사진 연결 기능 준비 중"},
@@ -27,6 +28,8 @@ final class ImportWorkbook {
             var combined = new ArrayList<Object[]>();
             for (var document : documents) {
                 var file = document.file(); var result = document.analysis();
+                var taxByRow = new HashMap<String, ImportAnalysis.CardReview>();
+                for (var tax : result.cardReviews()) taxByRow.put(reviewKey(tax.page(), tax.line(), tax.sheet()), tax);
                 long count = result.rows().stream().filter(row -> included(row, month)).count();
                 states.add(new Object[]{file.name(), label(file.kind()), status(result.status()), count, result.analyzedAt(),
                         "", "", file.id()});
@@ -34,12 +37,13 @@ final class ImportWorkbook {
                         result.analyzedAt(), issue.sheet() != null && !issue.sheet().isBlank() ? issue.sheet() : issue.page() == 0 ? null : issue.page(), issue.message(), file.id()});
                 for (var row : result.rows()) {
                     if (!included(row, month)) continue;
-                    combined.add(new Object[]{row.date(), label(file.kind()), row.party(), row.amount(), row.supply(), row.vat(),
+                    var tax = taxCells(taxByRow.get(reviewKey(row.page(), row.line(), row.sheet())), file.kind() == ImportFiles.Kind.CARD_PDF);
+                    combined.add(append(new Object[]{row.date(), label(file.kind()), row.party(), row.amount(), row.supply(), row.vat(),
                             row.deposit(), row.withdrawal(), row.balance(), row.type(), row.reference(), row.originalReference(),
-                            row.businessNumber(), row.time(), row.currency(), row.description(), row.warning(), file.name(), location(row), file.id()});
-                    if (file.kind() == ImportFiles.Kind.CARD_PDF) cards.add(new Object[]{row.date(), row.time(), row.type(),
+                            row.businessNumber(), row.time(), row.currency(), row.description(), row.warning(), file.name(), location(row), file.id()}, tax));
+                    if (file.kind() == ImportFiles.Kind.CARD_PDF) cards.add(append(new Object[]{row.date(), row.time(), row.type(),
                             row.party(), row.businessNumber(), row.reference(), row.originalReference(), row.amount(), row.supply(), row.vat(),
-                            row.currency(), row.description(), row.warning(), file.name(), location(row), row.line(), file.id()});
+                            row.currency(), row.description(), row.warning(), file.name(), location(row), row.line(), file.id()}, tax));
                     if (file.kind() == ImportFiles.Kind.ACCOUNT_PDF) accounts.add(new Object[]{row.date(), row.time(), row.party(),
                             row.deposit(), row.withdrawal(), row.balance(), row.currency(), row.description(), row.warning(), file.name(), location(row), row.line(), file.id()});
                     if (file.kind() == ImportFiles.Kind.TAX_INVOICE) invoices.add(new Object[]{row.type(), row.date(), row.party(),
@@ -49,9 +53,9 @@ final class ImportWorkbook {
             }
             combined.sort(Comparator.comparing((Object[] row) -> row[0].toString().isEmpty() ? "9999-99-99" : row[0].toString())
                     .thenComparing(row -> row[1].toString()).thenComparing(row -> row[17].toString()));
-            write(book, "통합내역", new String[]{"거래일 / 작성일", "자료 종류", "거래처", "총액 / 이용금액", "공급가액", "부가세", "계좌 입금액", "계좌 출금액", "계좌 잔액", "거래 구분", "승인 / 문서번호", "원승인 / 원문서번호", "거래처 사업자번호", "시각", "통화", "적요 / 품목", "추출 확인사항", "원본 파일", "원본 위치", "자료 ID"}, combined);
+            write(book, "통합내역", new String[]{"거래일 / 작성일", "자료 종류", "거래처", "총액 / 이용금액", "공급가액", "부가세", "계좌 입금액", "계좌 출금액", "계좌 잔액", "거래 구분", "승인 / 문서번호", "원승인 / 원문서번호", "거래처 사업자번호", "시각", "통화", "적요 / 품목", "추출 확인사항", "원본 파일", "원본 위치", "자료 ID", "과세유형", "조회구분", "조회일시", "부가세 검토", "공제 후보 세액", "검토 사유", "검토 규칙버전"}, combined);
             book.setSheetOrder("통합내역", 0); book.setActiveSheet(0); book.setSelectedTab(0);
-            write(book, "카드내역", new String[]{"사용일자", "시각", "구분", "가맹점", "거래처 사업자번호", "승인번호", "원승인번호", "이용금액", "공급가액", "부가세", "통화", "적요", "추출 확인사항", "원본 파일", "페이지 / 시트", "원본 행", "자료 ID"}, cards);
+            write(book, "카드내역", new String[]{"사용일자", "시각", "구분", "가맹점", "거래처 사업자번호", "승인번호", "원승인번호", "이용금액", "공급가액", "부가세", "통화", "적요", "추출 확인사항", "원본 파일", "페이지 / 시트", "원본 행", "자료 ID", "과세유형", "조회구분", "조회일시", "부가세 검토", "공제 후보 세액", "검토 사유", "검토 규칙버전"}, cards);
             write(book, "계좌입출금", new String[]{"거래일자", "시각", "거래 상대방", "입금액", "출금액", "거래 후 잔액", "통화", "적요", "추출 확인사항", "원본 파일", "페이지 / 시트", "원본 행", "자료 ID"}, accounts);
             write(book, "세금계산서", new String[]{"매출·매입", "작성일자", "거래처", "거래처 사업자번호", "문서 번호", "원문서 번호", "공급가액", "부가세", "합계금액", "품목·수정 사유", "추출 확인사항", "원본 파일", "페이지 / 시트", "자료 ID"}, invoices);
             write(book, "처리현황", new String[]{"원본 파일", "자료 종류", "분석 상태", "범위 내 추출 건수", "분석일시", "확인 페이지", "안내", "자료 ID"}, states);
@@ -61,6 +65,19 @@ final class ImportWorkbook {
     }
 
     static boolean included(ImportAnalysis.Transaction row, String month) { return month.isEmpty() || row.date().startsWith(month + "-"); }
+    private static String reviewKey(int page, int line, String sheet) { return page + "/" + line + "/" + Objects.toString(sheet, ""); }
+    private static Object[] taxCells(ImportAnalysis.CardReview tax, boolean card) {
+        if (!card) return new Object[]{"", "", "", "", null, "", ""};
+        if (tax == null) return new Object[]{"미조회", "미조회", "", "확인 필요", null, "카드 과세유형·부가세 검토를 실행해 주세요.", ""};
+        return new Object[]{tax.lookup() == null ? "미조회" : tax.lookup().taxType(), tax.mode().equals("TEST") ? "테스트 조회" : "국세청 실제 조회",
+                tax.lookup() == null ? tax.checkedAt() : tax.lookup().checkedAt(), tax.review().label(), tax.candidateVat(),
+                tax.review().reason(), tax.review().ruleVersion()};
+    }
+    private static Object[] append(Object[] row, Object[] extra) {
+        var result = Arrays.copyOf(row, row.length + extra.length);
+        System.arraycopy(extra, 0, result, row.length, extra.length);
+        return result;
+    }
     private static Object location(ImportAnalysis.Transaction row) {
         return row.sheet() == null || row.sheet().isBlank() ? row.page() : row.sheet() + " · " + row.line() + "행";
     }
@@ -79,7 +96,7 @@ final class ImportWorkbook {
         var first = sheet.createRow(0); first.setHeightInPoints(28);
         for (int i = 0; i < headings.length; i++) {
             first.createCell(i).setCellValue(headings[i]); first.getCell(i).setCellStyle(header);
-            sheet.setColumnWidth(i, (headings[i].contains("안내") || headings[i].contains("확인사항") || headings[i].equals("내용") ? 65 : 24) * 256);
+            sheet.setColumnWidth(i, (headings[i].contains("안내") || headings[i].contains("확인사항") || headings[i].equals("내용") || headings[i].equals("검토 사유") ? 65 : 24) * 256);
         }
         int index = 1;
         for (var value : values) {

@@ -9,8 +9,17 @@ public final class VatDeductionReview {
     public static final String NOTICE = "자동 검토 제안 · 매입자 과세사업 여부·사용 목적·증빙 원본·신고 요건은 세무사 최종 확인 · 환급 확정 아님";
     private static final tools.jackson.databind.ObjectMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
     public record Result(String code, String label, String reason, String rule, String ruleVersion) {}
+    public record Input(String receiptDate, String vendor, String category, String description, Long amount,
+            Long supplyAmount, Long vatAmount, String paymentMethod, String note, String ocrText,
+            String duplicateState, String businessNumber, NtsBusinessLookup.Result businessLookup, TaxInvoice taxInvoice) {}
 
     public static Result evaluate(Expense e) {
+        return evaluate(new Input(e.receiptDate(), e.vendor(), e.category(), e.description(), e.amount(),
+                e.supplyAmount(), e.vatAmount(), e.paymentMethod(), e.note(), e.ocrText(), e.duplicateState(),
+                e.businessNumber(), e.businessLookup(), e.taxInvoice()));
+    }
+
+    public static Result evaluate(Input e) {
         if ("EXCLUDED".equals(e.duplicateState())) return result("EXCLUDED", "집계 제외", "중복 제외된 영수증입니다.", "DUPLICATE");
         // 계정과목과 실제 지출 목적을 최종 대조해야 합니다. 분류 결과로 원금·세액을 변경하지 않습니다.
         if (Set.of("접대비", "기업업무추진비").contains(s(e.category())))

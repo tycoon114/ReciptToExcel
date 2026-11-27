@@ -1,0 +1,7 @@
+{
+  "0000000015": {"taxTypeCode": "01", "taxType": "부가가치세 일반과세자"},
+  "0000000029": {"taxTypeCode": "01", "taxType": "부가가치세 일반과세자"},
+  "0000000034": {"taxTypeCode": "07", "taxType": "부가가치세 간이과세자(세금계산서 발급사업자)", "invoiceAppliedOn": "2020-01-01"},
+  "0000000048": {"taxTypeCode": "02", "taxType": "부가가치세 간이과세자"},
+  "0000000053": {"taxTypeCode": "04", "taxType": "부가가치세 면세사업자"}
+}

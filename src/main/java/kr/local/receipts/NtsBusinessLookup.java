@@ -71,8 +71,16 @@ public class NtsBusinessLookup {
 
     /** 연결 확인은 임시 입력 키로 요청하며 장부와 저장된 키를 변경하지 않습니다. */
     Result request(String number, String key) {
+        return requestBatch(List.of(number), key).get(number);
+    }
+
+    Map<String, Result> requestBatch(List<String> numbers) { return requestBatch(numbers, activeKey()); }
+
+    private Map<String, Result> requestBatch(List<String> numbers, String key) {
         if (key.isBlank()) throw ReceiptService.bad("국세청 인증키를 설정해 주세요.");
-        if (!ReceiptMetadataParser.validBusinessNumber(number)) throw ReceiptService.bad("사업자등록번호를 확인해 주세요.");
+        if (numbers.isEmpty() || numbers.size() > 100 || new HashSet<>(numbers).size() != numbers.size()
+                || numbers.stream().anyMatch(number -> !ReceiptMetadataParser.validBusinessNumber(number)))
+            throw ReceiptService.bad("서로 다른 올바른 사업자등록번호를 1~100개 선택해 주세요.");
         try {
             // 포털의 Encoding/Decoding 키를 모두 받아 한 번만 URL 인코딩합니다. + 문자를 공백으로 바꾸지 않습니다.
             String rawKey = key.contains("%") ? URLDecoder.decode(key, StandardCharsets.UTF_8) : key;
@@ -80,7 +88,7 @@ public class NtsBusinessLookup {
             var request = HttpRequest.newBuilder(URI.create(endpoint + "?serviceKey=" + encoded + "&returnType=JSON"))
                     .timeout(Duration.ofSeconds(12)).header("Content-Type", "application/json")
                     .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(Map.of("b_no", List.of(number)))))
+                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(Map.of("b_no", numbers))))
                     .build();
             var response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
             {
@@ -89,26 +97,34 @@ public class NtsBusinessLookup {
                 if (response.statusCode() == 429) throw failure("국세청 조회 한도에 도달했습니다. 잠시 후 다시 조회해 주세요.");
                 if (response.statusCode() != 200) throw failure("국세청 조회 서비스에 연결하지 못했습니다. 기존 조회 결과는 유지됩니다.");
                 byte[] bytes = response.body();
-                if (bytes.length > 65536) throw failure("국세청 응답 형식을 확인하지 못했습니다. 다시 조회해 주세요.");
+                if (bytes.length > 65536L * numbers.size()) throw failure("국세청 응답 형식을 확인하지 못했습니다. 다시 조회해 주세요.");
                 var root = json.readTree(bytes);
                 if (!"OK".equals(root.path("status_code").asText()))
                     throw failure("국세청 조회가 승인되지 않았습니다. 인증키·활용신청·호출 한도를 확인해 주세요.");
                 var entries = root.path("data");
-                if (!entries.isArray() || entries.size() != 1 || !number.equals(entries.get(0).path("b_no").asText()))
+                if (!entries.isArray() || entries.size() != numbers.size())
                     throw failure("조회한 번호와 국세청 응답이 일치하지 않아 저장하지 않았습니다.");
-                var item = entries.get(0);
-                String stateCode = value(item, "b_stt_cd", 2), taxCode = value(item, "tax_type_cd", 2);
-                String state = value(item, "b_stt", 40), tax = value(item, "tax_type", 200);
-                String checked = Instant.now(clock).toString();
-                if (stateCode.isBlank() && taxCode.isBlank() && tax.contains("등록되지 않은"))
-                    return new Result(number, "NOT_FOUND", "", "조회되지 않음", "", "조회되지 않음", "", "", "", "", checked);
-                if (!Set.of("01", "02", "03").contains(stateCode) || state.isBlank()
-                        || !taxCode.matches("[0-9]{2}") || tax.isBlank())
-                    throw failure("국세청 응답에 과세유형이 없거나 불완전하여 저장하지 않았습니다.");
-                // 02와 07을 합치지 않습니다. 07은 세금계산서 발급사업자인 간이과세자입니다.
-                return new Result(number, "FOUND", stateCode, state, taxCode, tax,
-                        date(item, "end_dt"), date(item, "tax_type_change_dt"), date(item, "invoice_apply_dt"),
-                        value(item, "rbf_tax_type", 200), checked);
+                var results = new LinkedHashMap<String, Result>();
+                for (var item : entries) {
+                    String number = value(item, "b_no", 10);
+                    if (!numbers.contains(number) || results.containsKey(number))
+                        throw failure("조회한 번호와 국세청 응답이 일치하지 않아 저장하지 않았습니다.");
+                    String stateCode = value(item, "b_stt_cd", 2), taxCode = value(item, "tax_type_cd", 2);
+                    String state = value(item, "b_stt", 40), tax = value(item, "tax_type", 200);
+                    String checked = Instant.now(clock).toString();
+                    if (stateCode.isBlank() && taxCode.isBlank() && tax.contains("등록되지 않은")) {
+                        results.put(number, new Result(number, "NOT_FOUND", "", "조회되지 않음", "", "조회되지 않음", "", "", "", "", checked));
+                        continue;
+                    }
+                    if (!Set.of("01", "02", "03").contains(stateCode) || state.isBlank()
+                            || !taxCode.matches("[0-9]{2}") || tax.isBlank())
+                        throw failure("국세청 응답에 과세유형이 없거나 불완전하여 저장하지 않았습니다.");
+                    // 02와 07을 합치지 않습니다. 07은 세금계산서 발급사업자인 간이과세자입니다.
+                    results.put(number, new Result(number, "FOUND", stateCode, state, taxCode, tax,
+                            date(item, "end_dt"), date(item, "tax_type_change_dt"), date(item, "invoice_apply_dt"),
+                            value(item, "rbf_tax_type", 200), checked));
+                }
+                return Map.copyOf(results);
             }
         } catch (ResponseStatusException e) { throw e; }
         catch (InterruptedException e) {

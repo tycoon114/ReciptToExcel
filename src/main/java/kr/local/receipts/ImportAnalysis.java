@@ -32,7 +32,15 @@ public class ImportAnalysis {
         public Issue(int page, String message) { this(page, message, ""); }
     }
     public record Result(String id, String status, String analyzedAt,
-            List<Transaction> rows, List<Issue> issues) {}
+            List<Transaction> rows, List<Issue> issues, List<CardReview> cardReviews) {
+        public Result { cardReviews = cardReviews == null ? List.of() : List.copyOf(cardReviews); }
+        public Result(String id, String status, String analyzedAt, List<Transaction> rows, List<Issue> issues) {
+            this(id, status, analyzedAt, rows, issues, List.of());
+        }
+    }
+    public record CardReview(int page, int line, String sheet, String businessNumber, String mode,
+            NtsBusinessLookup.Result lookup, VatDeductionReview.Result review, Long candidateVat,
+            String checkedAt, String lookupError) {}
     public record Document(ImportFiles.Entry file, Result analysis) {}
     private final ImportFiles files;
     private final ObjectMapper json;
@@ -92,14 +100,26 @@ public class ImportAnalysis {
         }
         String status = failed ? "FAILED" : issues.isEmpty() ? "READY" : "REVIEW";
         var result = new Result(id, status, Instant.now().toString(), List.copyOf(rows), List.copyOf(issues));
+        save(result);
+        return result;
+    }
+
+    public synchronized void saveCardReviews(Result expected, List<CardReview> reviews) throws IOException {
+        var current = json.readValue(Files.readString(root.resolve(expected.id() + ".json")), Result.class);
+        if (!current.analyzedAt().equals(expected.analyzedAt()) || !current.rows().equals(expected.rows()))
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                    "분석 결과가 변경되었습니다. 카드 부가세 검토를 다시 실행해 주세요.");
+        save(new Result(current.id(), current.status(), current.analyzedAt(), current.rows(), current.issues(), reviews));
+    }
+
+    private void save(Result result) throws IOException {
         Path temporary = Files.createTempFile(root, "analysis-", ".tmp");
         try {
             Files.writeString(temporary, json.writeValueAsString(result));
-            Files.move(temporary, root.resolve(id + ".json"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temporary, root.resolve(result.id() + ".json"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } finally {
             Files.deleteIfExists(temporary);
         }
-        return result;
     }
 
     static boolean analyzable(ImportFiles.Entry file) {
